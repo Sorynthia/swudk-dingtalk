@@ -20,11 +20,12 @@ cp .env.example .env
 pnpm dev
 ```
 
-编辑 `.env`，将 `APP_ORIGIN` 设置为浏览器实际访问的来源，末尾不要添加 `/`；`PORT` 控制开发和生产服务的监听端口。`pnpm dev` 与 `pnpm start` 会在启动 Next.js 前自动加载该文件。
+编辑 `.env`，将 `APP_ORIGIN` 设置为浏览器实际访问的来源，末尾不要添加 `/`；`PORT` 控制开发和生产服务的监听端口。`SESSION_SECRET` 是必填的会话加密密钥，应使用 `openssl rand -base64 32` 生成。`pnpm dev` 与 `pnpm start` 会在启动 Next.js 前自动加载该文件。
 
 ```env
 APP_ORIGIN=https://example.com
 PORT=3001
+SESSION_SECRET=请替换为至少32字符的随机密钥
 ```
 
 生产环境先执行 `pnpm build`，再执行 `pnpm start`。示例配置对应端口为 `3001`。
@@ -50,7 +51,7 @@ pnpm build
 
 未登录时不会自动生成二维码。页面只检查本机会话，用户点击“生成登录二维码”后才会请求钉钉登录服务。同一会话会复用仍有效的二维码；移动端切到钉钉或标签页进入后台后会暂停新轮询，返回页面、恢复网络或从浏览器缓存恢复时立即查询登录状态。短暂的网络和上游失败不会丢失当前二维码，扫码流程结束后立即清理二维码、临时 Cookie 和跳转参数。
 
-本机密钥默认保存在用户配置目录，与项目内的 `.data` 会话密文分离。也可以通过 `SESSION_SECRET` 环境变量提供稳定密钥，或用 `SESSION_KEY_PATH` 指定密钥文件位置。`.data` 已加入 `.gitignore`，不得提交或分享其中的会话文件。退出登录会同步删除对应的本机会话文件；不兼容的旧会话会失效并要求重新扫码。
+会话密文默认保存在项目根目录的 `.data`，校内 token 和必要学生资料使用 `SESSION_SECRET` 派生的 AES-256-GCM 密钥加密。`SESSION_SECRET` 只保存在未提交的 `.env` 或部署平台密钥配置中；项目不再创建或读取任何密钥文件。可以用 `SESSION_DATA_DIR` 覆盖会话目录。退出登录会同步删除对应的会话文件；更换密钥或遇到不兼容会话时需要重新扫码。
 
 所有使用 Cookie 鉴权的写接口都会校验请求 `Origin`。反向代理部署时若应用看到的内部 Origin 与公开地址不同，应将 `APP_ORIGIN` 设置为完整公开来源，例如 `https://example.com`。
 

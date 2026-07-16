@@ -14,8 +14,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 import type { CheckInStatus, LoginStage, SessionPayload, StudentProfile } from "@/lib/types";
 
@@ -27,10 +26,6 @@ const DEFAULT_DATA_DIRECTORY = join(/*turbopackIgnore: true*/ process.cwd(), ".d
 const DATA_DIRECTORY = process.env.SESSION_DATA_DIR
   ? resolve(process.env.SESSION_DATA_DIR)
   : DEFAULT_DATA_DIRECTORY;
-const DEFAULT_KEY_PATH = process.env.LOCALAPPDATA
-  ? join(process.env.LOCALAPPDATA, "swudk-dingtalk", "session.key")
-  : join(homedir(), ".config", "swudk-dingtalk", "session.key");
-const KEY_PATH = resolve(process.env.SESSION_KEY_PATH || DEFAULT_KEY_PATH);
 
 interface PersistedSession {
   version: 2;
@@ -70,31 +65,12 @@ function ensureDataDirectory() {
   mkdirSync(DATA_DIRECTORY, { recursive: true });
 }
 
-function ensureKeyDirectory() {
-  mkdirSync(dirname(KEY_PATH), { recursive: true, mode: 0o700 });
-}
-
-function readKey(path: string) {
-  const key = Buffer.from(readFileSync(path, "utf8").trim(), "base64");
-  if (key.length !== 32) throw new Error("本机会话密钥格式无效");
-  return key;
-}
-
 function getEncryptionKey() {
   const configuredSecret = process.env.SESSION_SECRET;
-  if (configuredSecret) return createHash("sha256").update(configuredSecret).digest();
-
-  ensureKeyDirectory();
-  if (!existsSync(KEY_PATH)) {
-    const keyValue = randomBytes(32).toString("base64");
-    try {
-      writeFileSync(KEY_PATH, keyValue, { encoding: "utf8", flag: "wx", mode: 0o600 });
-    } catch (error) {
-      if (!existsSync(KEY_PATH)) throw error;
-    }
+  if (!configuredSecret || configuredSecret.length < 32) {
+    throw new Error("SESSION_SECRET 未配置或长度不足 32 个字符");
   }
-
-  return readKey(KEY_PATH);
+  return createHash("sha256").update(configuredSecret).digest();
 }
 
 function persistedSessionPath(id: string) {

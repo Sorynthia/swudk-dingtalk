@@ -1,7 +1,7 @@
-import { createCipheriv, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -10,23 +10,25 @@ const temporaryDirectories: string[] = [];
 async function loadIsolatedStore() {
   const root = join(tmpdir(), `swudk-session-${randomBytes(8).toString("hex")}`);
   const dataDirectory = join(root, "data");
-  const keyPath = join(root, "keys", "session.key");
+  const sessionSecret = randomBytes(32).toString("base64");
   mkdirSync(dataDirectory, { recursive: true });
-  mkdirSync(dirname(keyPath), { recursive: true });
-  writeFileSync(keyPath, randomBytes(32).toString("base64"), "utf8");
   temporaryDirectories.push(root);
   process.env.SESSION_DATA_DIR = dataDirectory;
-  process.env.SESSION_KEY_PATH = keyPath;
-  delete process.env.SESSION_SECRET;
+  process.env.SESSION_SECRET = sessionSecret;
   (globalThis as typeof globalThis & { swuLoginSessions?: unknown }).swuLoginSessions = undefined;
   vi.resetModules();
   const store = await import("@/lib/session-store");
-  return { store, root, dataDirectory, keyPath };
+  return {
+    store,
+    root,
+    dataDirectory,
+    encryptionKey: createHash("sha256").update(sessionSecret).digest(),
+  };
 }
 
 afterEach(() => {
   delete process.env.SESSION_DATA_DIR;
-  delete process.env.SESSION_KEY_PATH;
+  delete process.env.SESSION_SECRET;
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -34,7 +36,7 @@ afterEach(() => {
 
 describe("本机会话存储", () => {
   it("加密保存并跨模块恢复当前会话", async () => {
-    const { store, dataDirectory, keyPath } = await loadIsolatedStore();
+    const { store, dataDirectory } = await loadIsolatedStore();
     const session = store.createLoginSession({
       expiresAt: Date.now() + store.LOGIN_TTL_MS,
       stage: "waiting",
@@ -54,7 +56,6 @@ describe("本机会话存储", () => {
     expect(session.cookies.size).toBe(0);
 
     const sessionPath = join(dataDirectory, `${session.id}.session`);
-    expect(existsSync(keyPath)).toBe(true);
     expect(readFileSync(sessionPath, "utf8")).not.toContain("test-secret-token");
 
     (globalThis as typeof globalThis & { swuLoginSessions?: unknown }).swuLoginSessions = undefined;
@@ -91,12 +92,12 @@ describe("本机会话存储", () => {
   });
 
   it("拒绝并删除包含旧资料结构的会话", async () => {
-    const { store, dataDirectory, keyPath } = await loadIsolatedStore();
+    const { store, dataDirectory, encryptionKey } = await loadIsolatedStore();
     const id = randomUUID();
     const iv = randomBytes(12);
     const cipher = createCipheriv(
       "aes-256-gcm",
-      Buffer.from(readFileSync(keyPath, "utf8").trim(), "base64"),
+      encryptionKey,
       iv,
     );
     const encrypted = Buffer.concat([
@@ -127,5 +128,26 @@ describe("本机会话存储", () => {
 
     expect(store.getLoginSession(id)).toBeUndefined();
     expect(existsSync(join(dataDirectory, `${id}.session`))).toBe(false);
+  });
+
+  it("缺少环境密钥时拒绝保存会话", async () => {
+    const { store } = await loadIsolatedStore();
+    delete process.env.SESSION_SECRET;
+    const session = store.createLoginSession({
+      expiresAt: Date.now() + store.LOGIN_TTL_MS,
+      stage: "waiting",
+      message: "测试",
+      qrImage: "",
+      qrCode: "",
+      goto: "",
+      appId: "",
+      cookies: new Map(),
+    });
+
+    expect(() => store.authenticateSession(session, "test-token", {
+      studentId: "20260001",
+      dormitory: null,
+      updatedAt: new Date().toISOString(),
+    })).toThrow("SESSION_SECRET 未配置或长度不足 32 个字符");
   });
 });
