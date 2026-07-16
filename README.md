@@ -16,10 +16,18 @@
 
 ```bash
 pnpm install
+cp .env.example .env
 pnpm dev
 ```
 
-打开 `http://localhost:3000`，使用钉钉扫码并在手机端确认授权。
+编辑 `.env`，将 `APP_ORIGIN` 设置为浏览器实际访问的来源，末尾不要添加 `/`；`PORT` 控制开发和生产服务的监听端口。`pnpm dev` 与 `pnpm start` 会在启动 Next.js 前自动加载该文件。
+
+```env
+APP_ORIGIN=https://example.com
+PORT=3001
+```
+
+生产环境先执行 `pnpm build`，再执行 `pnpm start`。示例配置对应端口为 `3001`。
 
 ## 质量检查
 

@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node --env-file=.env node_modules/next/dist/bin/next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node --env-file=.env node_modules/next/dist/bin/next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
