@@ -161,4 +161,58 @@ describe("本机会话存储", () => {
     expect(session.token).toBeUndefined();
     expect(session.profile).toBeUndefined();
   });
+
+  it("退出后异步请求不能重新持久化已删除的会话", async () => {
+    const { store, dataDirectory } = await loadIsolatedStore();
+    const session = store.createLoginSession({
+      expiresAt: Date.now() + store.LOGIN_TTL_MS,
+      stage: "waiting",
+      message: "测试",
+      qrImage: "",
+      qrCode: "",
+      goto: "",
+      appId: "",
+      cookies: new Map(),
+    });
+    store.authenticateSession(session, "test-token", {
+      studentId: "20260001",
+      dormitory: null,
+      updatedAt: new Date().toISOString(),
+    });
+    const sessionPath = join(dataDirectory, `${session.id}.session`);
+
+    store.deleteLoginSession(session.id);
+    expect(existsSync(sessionPath)).toBe(false);
+
+    session.profile = {
+      studentId: "20260001",
+      dormitory: { address: "学生园区 2 舍", checkInRadius: "300 米" },
+      updatedAt: new Date().toISOString(),
+    };
+    expect(store.persistAuthenticatedSession(session)).toBe(false);
+    expect(existsSync(sessionPath)).toBe(false);
+  });
+
+  it("退出后未完成的登录流程不能恢复已删除的会话", async () => {
+    const { store, dataDirectory } = await loadIsolatedStore();
+    const session = store.createLoginSession({
+      expiresAt: Date.now() + store.LOGIN_TTL_MS,
+      stage: "waiting",
+      message: "等待扫码",
+      qrImage: "",
+      qrCode: "",
+      goto: "",
+      appId: "",
+      cookies: new Map(),
+    });
+
+    store.deleteLoginSession(session.id);
+    expect(() => store.authenticateSession(session, "test-token", {
+      studentId: "20260001",
+      dormitory: null,
+      updatedAt: new Date().toISOString(),
+    })).toThrow("登录会话已失效");
+    expect(session.stage).toBe("waiting");
+    expect(existsSync(join(dataDirectory, `${session.id}.session`))).toBe(false);
+  });
 });

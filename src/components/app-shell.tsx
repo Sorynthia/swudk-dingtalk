@@ -558,6 +558,9 @@ export default function AppShell({
   const [expiresAt, setExpiresAt] = useState(initialPayload.expiresAt);
   const [message, setMessage] = useState(initialPayload.message);
   const [profile, setProfile] = useState(initialPayload.profile);
+  const [useInitialCheckInState, setUseInitialCheckInState] = useState(
+    initialPayload.stage === "authenticated",
+  );
   const qrRequestPending = useRef(false);
 
   const applyPayload = useCallback((payload: SessionPayload) => {
@@ -575,6 +578,7 @@ export default function AppShell({
     setMessage(undefined);
     setQrImage(undefined);
     setExpiresAt(undefined);
+    setUseInitialCheckInState(false);
     try {
       const response = await fetch("/api/auth/qr", { method: "POST" });
       applyPayload(await readPayload(response));
@@ -670,6 +674,7 @@ export default function AppShell({
     setQrImage(undefined);
     setExpiresAt(undefined);
     setMessage(undefined);
+    setUseInitialCheckInState(false);
     setStage("idle");
   }, []);
 
@@ -682,8 +687,8 @@ export default function AppShell({
     return (
       <Dashboard
         profile={profile}
-        initialCheckInStatus={initialCheckInStatus}
-        initialCheckInError={initialCheckInError}
+        initialCheckInStatus={useInitialCheckInState ? initialCheckInStatus : undefined}
+        initialCheckInError={useInitialCheckInState ? initialCheckInError : undefined}
         onLogout={logout}
         onSessionExpired={clearClientSession}
         onProfileChange={setProfile}

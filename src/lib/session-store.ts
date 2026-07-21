@@ -225,8 +225,13 @@ export function clearPendingLoginData(session: LoginSession) {
   session.pollFailureCount = undefined;
 }
 
-export function persistAuthenticatedSession(session: LoginSession) {
-  if (session.stage !== "authenticated" || !session.token || !session.profile) return;
+function writeAuthenticatedSession(
+  session: LoginSession,
+  token: string,
+  profile: StudentProfile,
+  expiresAt: number,
+) {
+  if (sessions.get(session.id) !== session) return false;
   ensureDataDirectory();
   writeFileSync(
     persistedSessionPath(session.id),
@@ -234,24 +239,25 @@ export function persistAuthenticatedSession(session: LoginSession) {
       version: 2,
       id: session.id,
       createdAt: session.createdAt,
-      expiresAt: session.expiresAt,
-      token: session.token,
-      profile: session.profile,
+      expiresAt,
+      token,
+      profile,
     }),
     { encoding: "utf8", mode: 0o600 },
   );
+  return true;
+}
+
+export function persistAuthenticatedSession(session: LoginSession) {
+  if (session.stage !== "authenticated" || !session.token || !session.profile) return false;
+  return writeAuthenticatedSession(session, session.token, session.profile, session.expiresAt);
 }
 
 export function authenticateSession(session: LoginSession, token: string, profile: StudentProfile) {
   const expiresAt = Date.now() + AUTHENTICATED_TTL_MS;
-  persistAuthenticatedSession({
-    ...session,
-    stage: "authenticated",
-    message: "登录成功",
-    token,
-    profile,
-    expiresAt,
-  });
+  if (!writeAuthenticatedSession(session, token, profile, expiresAt)) {
+    throw new Error("登录会话已失效");
+  }
 
   session.stage = "authenticated";
   session.message = "登录成功";
