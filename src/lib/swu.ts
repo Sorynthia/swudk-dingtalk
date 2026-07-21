@@ -169,9 +169,29 @@ function requireString(value: unknown, message: string) {
   return value.trim();
 }
 
-function requireCoordinate(value: unknown, message: string) {
+function requireStringOrNumber(value: unknown, message: string) {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  throw new Error(message);
+}
+
+function requireCoordinate(
+  value: unknown,
+  missingMessage: string,
+  invalidMessage: string,
+  minimum: number,
+  maximum: number,
+) {
+  if (
+    (typeof value !== "number" && typeof value !== "string") ||
+    (typeof value === "string" && !value.trim())
+  ) {
+    throw new Error(missingMessage);
+  }
   const coordinate = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(coordinate)) throw new Error(message);
+  if (!Number.isFinite(coordinate) || coordinate < minimum || coordinate > maximum) {
+    throw new Error(invalidMessage);
+  }
   return coordinate;
 }
 
@@ -226,10 +246,22 @@ export async function submitCheckIn(token: string): Promise<CheckInStatus> {
   const columns = readDormitoryColumns(dormitory);
   if (columns.length < 3) throw new Error("住宿信息不完整，无法执行签到");
 
-  const latitude = requireCoordinate(columns[0].latitude, "住宿信息缺少纬度");
-  const longitude = requireCoordinate(columns[0].longitude, "住宿信息缺少经度");
+  const latitude = requireCoordinate(
+    columns[0].latitude,
+    "住宿信息缺少纬度",
+    "住宿信息中的纬度无效",
+    -90,
+    90,
+  );
+  const longitude = requireCoordinate(
+    columns[0].longitude,
+    "住宿信息缺少经度",
+    "住宿信息中的经度无效",
+    -180,
+    180,
+  );
   const address = requireString(columns[1].value, "住宿信息缺少签到地址");
-  const checkInRadius = requireString(columns[2].value, "住宿信息缺少签到半径");
+  const checkInRadius = requireStringOrNumber(columns[2].value, "住宿信息缺少签到半径");
   const saveUrl = new URL(CHECK_IN_URL);
   saveUrl.searchParams.set("formId", formId);
   saveUrl.searchParams.set("isSubmitProcess", "false");

@@ -59,15 +59,24 @@ export function assertAllowedLoginUrl(url: string) {
   return parsed.toString();
 }
 
-function absorbCookies(session: Pick<LoginSession, "cookies">, response: Response) {
+function absorbCookies(
+  session: Pick<LoginSession, "cookies">,
+  requestUrl: string,
+  response: Response,
+) {
   const headers = response.headers as Headers & { getSetCookie?: () => string[] };
   const setCookies = headers.getSetCookie?.call(response.headers) ?? [];
+  if (setCookies.length === 0) return;
+
+  const origin = new URL(requestUrl).origin;
+  const originCookies = session.cookies.get(origin) ?? new Map<string, string>();
+  session.cookies.set(origin, originCookies);
 
   for (const value of setCookies) {
     const [pair] = value.split(";", 1);
     const separator = pair.indexOf("=");
     if (separator <= 0) continue;
-    session.cookies.set(pair.slice(0, separator), pair.slice(separator + 1));
+    originCookies.set(pair.slice(0, separator), pair.slice(separator + 1));
   }
 }
 
@@ -77,7 +86,10 @@ async function requestWithCookies(
   init: RequestInit = {},
 ) {
   const safeUrl = assertAllowedLoginUrl(url);
-  const cookie = [...session.cookies].map(([key, value]) => `${key}=${value}`).join("; ");
+  const originCookies = session.cookies.get(new URL(safeUrl).origin);
+  const cookie = originCookies
+    ? [...originCookies].map(([key, value]) => `${key}=${value}`).join("; ")
+    : "";
   const headers = new Headers(DEFAULT_HEADERS);
   new Headers(init.headers).forEach((value, key) => headers.set(key, value));
   if (cookie) headers.set("Cookie", cookie);
@@ -89,7 +101,7 @@ async function requestWithCookies(
     cache: "no-store",
     signal: AbortSignal.timeout(10_000),
   });
-  absorbCookies(session, response);
+  absorbCookies(session, safeUrl, response);
   return response;
 }
 
@@ -133,7 +145,7 @@ async function readJson<T>(response: Response, context: string): Promise<T> {
 }
 
 export async function startDingTalkLogin() {
-  const pendingSession = { cookies: new Map<string, string>() };
+  const pendingSession: Pick<LoginSession, "cookies"> = { cookies: new Map() };
   const { url: redirectUrl } = await followRedirects(pendingSession, LOGIN_URL);
   const state = extractState(redirectUrl);
   const goto =

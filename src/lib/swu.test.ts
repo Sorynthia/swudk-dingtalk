@@ -104,7 +104,18 @@ describe("校内资料和签到逻辑", () => {
       if (url.includes("/api/auth/user")) {
         return jsonResponse({ code: 200, data: { subject: { username: "20260001" } } });
       }
-      if (url.includes("getDormitory")) return jsonResponse(dormitoryPayload);
+      if (url.includes("getDormitory")) {
+        return jsonResponse({
+          code: 200,
+          data: {
+            columnList: [
+              { latitude: 29.8, longitude: 106.4 },
+              { value: "学生园区 1 舍" },
+              { value: 500 },
+            ],
+          },
+        });
+      }
       if (url.includes("form-instance/save")) {
         submittedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
         return jsonResponse({ code: 200, message: "保存成功" });
@@ -120,9 +131,53 @@ describe("校内资料和签到逻辑", () => {
       id: "task-1",
       formId: "form-1",
       xh: "20260001",
-      qdbj: "500 米",
+      qdbj: "500",
     });
     expect(transitionCalls).toBe(2);
+  });
+
+  it.each([
+    ["空白纬度", " ", 106.4, "住宿信息缺少纬度"],
+    ["越界纬度", 91, 106.4, "住宿信息中的纬度无效"],
+    ["越界经度", 29.8, 181, "住宿信息中的经度无效"],
+  ])("拒绝%s", async (_caseName, latitude, longitude, expectedMessage) => {
+    let transitionCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("listSelfLeaveData")) {
+        return jsonResponse({ code: 200, data: { records: [] } });
+      }
+      if (url.includes("getTransitionByToday")) {
+        transitionCalls += 1;
+        return jsonResponse({
+          code: 200,
+          data: {
+            records: [{ id: "task-1", formId: "form-1", qdzt: transitionCalls > 1 ? "已签到" : "未签到" }],
+          },
+        });
+      }
+      if (url.includes("/api/auth/user")) {
+        return jsonResponse({ code: 200, data: { subject: { username: "20260001" } } });
+      }
+      if (url.includes("getDormitory")) {
+        return jsonResponse({
+          code: 200,
+          data: {
+            columnList: [
+              { latitude, longitude },
+              { value: "学生园区 1 舍" },
+              { value: "500 米" },
+            ],
+          },
+        });
+      }
+      if (url.includes("form-instance/save")) {
+        return jsonResponse({ code: 200, message: "保存成功" });
+      }
+      throw new Error(`未处理的测试 URL: ${url}`);
+    }));
+
+    await expect(submitCheckIn("test-token")).rejects.toThrow(expectedMessage);
   });
 
   it("HTTP 200 的业务失败不会被报告为签到成功", async () => {

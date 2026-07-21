@@ -27,6 +27,8 @@ const DATA_DIRECTORY = process.env.SESSION_DATA_DIR
   ? resolve(process.env.SESSION_DATA_DIR)
   : DEFAULT_DATA_DIRECTORY;
 
+export type LoginCookieStore = Map<string, Map<string, string>>;
+
 interface PersistedSession {
   version: 2;
   id: string;
@@ -46,7 +48,7 @@ export interface LoginSession {
   qrCode: string;
   goto: string;
   appId: string;
-  cookies: Map<string, string>;
+  cookies: LoginCookieStore;
   token?: string;
   profile?: StudentProfile;
   pollPromise?: Promise<SessionPayload>;
@@ -241,13 +243,22 @@ export function persistAuthenticatedSession(session: LoginSession) {
 }
 
 export function authenticateSession(session: LoginSession, token: string, profile: StudentProfile) {
+  const expiresAt = Date.now() + AUTHENTICATED_TTL_MS;
+  persistAuthenticatedSession({
+    ...session,
+    stage: "authenticated",
+    message: "登录成功",
+    token,
+    profile,
+    expiresAt,
+  });
+
   session.stage = "authenticated";
   session.message = "登录成功";
   session.token = token;
   session.profile = profile;
-  session.expiresAt = Date.now() + AUTHENTICATED_TTL_MS;
+  session.expiresAt = expiresAt;
   clearPendingLoginData(session);
-  persistAuthenticatedSession(session);
 }
 
 export function deleteLoginSession(id: string | undefined) {

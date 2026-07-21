@@ -45,7 +45,9 @@ describe("本机会话存储", () => {
       qrCode: "temporary-code",
       goto: "https://oapi.dingtalk.com/connect/oauth2/sns_authorize",
       appId: "temporary-app",
-      cookies: new Map([["temporary-cookie", "value"]]),
+      cookies: new Map([
+        ["https://login.dingtalk.com", new Map([["temporary-cookie", "value"]])],
+      ]),
     });
     store.authenticateSession(session, "test-secret-token", {
       studentId: "20260001",
@@ -144,10 +146,19 @@ describe("本机会话存储", () => {
       cookies: new Map(),
     });
 
+    const originalExpiresAt = session.expiresAt;
+
     expect(() => store.authenticateSession(session, "test-token", {
       studentId: "20260001",
       dormitory: null,
       updatedAt: new Date().toISOString(),
     })).toThrow("SESSION_SECRET 未配置或长度不足 32 个字符");
+    expect(session).toMatchObject({
+      stage: "waiting",
+      message: "测试",
+      expiresAt: originalExpiresAt,
+    });
+    expect(session.token).toBeUndefined();
+    expect(session.profile).toBeUndefined();
   });
 });

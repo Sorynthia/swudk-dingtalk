@@ -45,7 +45,6 @@ pnpm build
 - `src/lib/swu.ts` 负责查询学号、住宿信息、请假与临时签到状态，并提交用户主动触发的签到。
 - `src/lib/session-store.ts` 使用不可读的 `HttpOnly` Cookie 关联服务端会话；token 和必要学生资料使用 AES-256-GCM 加密保存在本机 `.data` 目录。恢复后的实际有效期由校内登录状态决定。
 - `src/app/api` 提供二维码、轮询、会话、信息刷新与临时签到接口。
-- `dingding.py` 与 `get_info.py` 作为原始协议参考保留，不参与 Next.js 运行。
 
 临时签到只会在用户点击“执行临时签到”后提交。实现依据当前接口约定，使用 `getDormitory` 返回的 `data.columnList`：第 1 项提供登记经纬度，第 2 项提供住宿地址，第 3 项提供签到半径。若校内接口字段顺序发生变化，需要同步更新 `src/lib/swu.ts` 中的字段读取逻辑。
 
