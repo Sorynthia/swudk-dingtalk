@@ -162,6 +162,28 @@ describe("本机会话存储", () => {
     expect(session.profile).toBeUndefined();
   });
 
+  it("已过期的待扫码会话不能被异步登录流程认证", async () => {
+    const { store, dataDirectory } = await loadIsolatedStore();
+    const session = store.createLoginSession({
+      expiresAt: Date.now() - 1,
+      stage: "waiting",
+      message: "等待扫码",
+      qrImage: "",
+      qrCode: "code",
+      goto: "goto",
+      appId: "app",
+      cookies: new Map(),
+    });
+
+    expect(() => store.authenticateSession(session, "test-token", {
+      studentId: "20260001",
+      dormitory: null,
+      updatedAt: new Date().toISOString(),
+    })).toThrow("登录会话已失效");
+    expect(session.stage).toBe("waiting");
+    expect(existsSync(join(dataDirectory, `${session.id}.session`))).toBe(false);
+  });
+
   it("退出后异步请求不能重新持久化已删除的会话", async () => {
     const { store, dataDirectory } = await loadIsolatedStore();
     const session = store.createLoginSession({

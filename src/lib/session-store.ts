@@ -254,6 +254,13 @@ export function persistAuthenticatedSession(session: LoginSession) {
 }
 
 export function authenticateSession(session: LoginSession, token: string, profile: StudentProfile) {
+  if (
+    sessions.get(session.id) !== session ||
+    (session.stage !== "waiting" && session.stage !== "scanned") ||
+    session.expiresAt <= Date.now()
+  ) {
+    throw new Error("登录会话已失效");
+  }
   const expiresAt = Date.now() + AUTHENTICATED_TTL_MS;
   if (!writeAuthenticatedSession(session, token, profile, expiresAt)) {
     throw new Error("登录会话已失效");

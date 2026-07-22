@@ -242,6 +242,7 @@ export async function submitCheckIn(token: string): Promise<CheckInStatus> {
     fetchJson<UserResponse>(USER_URL, token),
     getDormitory(token),
   ]);
+  assertBusinessSuccess(userPayload, "学生信息查询");
   const studentId = requireString(userPayload.data?.subject?.username, "校内服务未返回学号");
   const columns = readDormitoryColumns(dormitory);
   if (columns.length < 3) throw new Error("住宿信息不完整，无法执行签到");

@@ -199,4 +199,34 @@ describe("校内资料和签到逻辑", () => {
 
     await expect(submitCheckIn("test-token")).rejects.toThrow("保存失败");
   });
+
+  it("学生信息业务失败时不会提交签到", async () => {
+    let saveCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("listSelfLeaveData")) {
+        return jsonResponse({ code: 200, data: { records: [] } });
+      }
+      if (url.includes("getTransitionByToday")) {
+        return jsonResponse({ code: 200, data: { records: [{ id: "task-1", formId: "form-1", qdzt: "未签到" }] } });
+      }
+      if (url.includes("/api/auth/user")) {
+        return jsonResponse({
+          success: false,
+          code: 500,
+          message: "学生信息查询失败",
+          data: { subject: { username: "20260001" } },
+        });
+      }
+      if (url.includes("getDormitory")) return jsonResponse(dormitoryPayload);
+      if (url.includes("form-instance/save")) {
+        saveCalls += 1;
+        return jsonResponse({ code: 200, message: "保存成功" });
+      }
+      throw new Error(`未处理的测试 URL: ${url}`);
+    }));
+
+    await expect(submitCheckIn("test-token")).rejects.toThrow("学生信息查询失败");
+    expect(saveCalls).toBe(0);
+  });
 });
