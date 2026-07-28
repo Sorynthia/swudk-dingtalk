@@ -30,26 +30,30 @@
 }
 
 :root {
-  --radius: 0.75rem;
-  --background: oklch(0.975 0.004 95);
-  --foreground: oklch(0.19 0.018 42);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.19 0.018 42);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.19 0.018 42);
-  --primary: oklch(0.42 0.15 25);
-  --primary-foreground: oklch(0.985 0.005 95);
-  --secondary: oklch(0.94 0.007 85);
-  --secondary-foreground: oklch(0.27 0.02 42);
-  --muted: oklch(0.95 0.005 85);
-  --muted-foreground: oklch(0.49 0.015 52);
-  --accent: oklch(0.92 0.03 25);
-  --accent-foreground: oklch(0.36 0.13 25);
+  --radius: 0.625rem;
+  --background: oklch(0.985 0.012 85);
+  --foreground: oklch(0.28 0.035 58);
+  --card: oklch(0.97 0.018 84);
+  --card-foreground: oklch(0.28 0.035 58);
+  --popover: oklch(0.985 0.012 85);
+  --popover-foreground: oklch(0.28 0.035 58);
+  --primary: oklch(0.55 0.09 55);
+  --primary-foreground: oklch(0.99 0.008 85);
+  --secondary: oklch(0.91 0.03 82);
+  --secondary-foreground: oklch(0.36 0.04 58);
+  --muted: oklch(0.94 0.02 84);
+  --muted-foreground: oklch(0.5 0.035 58);
+  --accent: oklch(0.92 0.025 82);
+  --accent-foreground: oklch(0.34 0.04 58);
   --destructive: oklch(0.57 0.22 27);
-  --border: oklch(0.88 0.008 75);
-  --input: oklch(0.88 0.008 75);
-  --ring: oklch(0.52 0.14 25);
+  --border: oklch(0.86 0.025 78);
+  --input: oklch(0.86 0.025 78);
+  --ring: oklch(0.58 0.085 55);
   --font-sans: "Segoe UI Variable", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+  --shadow-neumorphic: -4px -4px 10px rgb(255 255 255 / 85%), 4px 4px 10px rgb(153 124 83 / 22%);
+  --shadow-neumorphic-hover: -5px -5px 12px rgb(255 255 255 / 88%), 5px 5px 12px rgb(153 124 83 / 26%);
+  --shadow-neumorphic-inset: inset 3px 3px 7px rgb(153 124 83 / 24%), inset -3px -3px 7px rgb(255 255 255 / 82%);
+  --shadow-panel: 0 22px 60px -38px rgb(108 83 48 / 42%);
 }
 
 @layer base {
@@ -64,6 +68,8 @@
 
   body {
     @apply min-h-dvh bg-background text-foreground antialiased;
+    background-image: radial-gradient(circle at 50% 0%, rgb(255 239 211 / 58%), transparent 34rem);
+    background-attachment: fixed;
   }
 
   button,
@@ -72,8 +78,64 @@
   }
 
   ::selection {
-    background: oklch(0.85 0.06 25);
+    background: oklch(0.86 0.055 66);
   }
+}
+
+[data-visual="service-orbit"],
+[data-visual="qr-orbit"] {
+  position: relative;
+}
+
+[data-visual="service-orbit"]::before,
+[data-visual="qr-orbit"]::before {
+  position: absolute;
+  inset: 0.65rem -0.35rem;
+  z-index: -1;
+  content: "";
+  border: 1px solid rgb(181 120 72 / 42%);
+  border-radius: 50%;
+  transform: rotate(-14deg);
+}
+
+[data-visual="service-orbit"]::after,
+[data-visual="qr-orbit"]::after {
+  position: absolute;
+  top: 0.1rem;
+  right: 0.45rem;
+  z-index: 20;
+  width: 1.1rem;
+  height: 1.1rem;
+  content: "";
+  color: oklch(0.68 0.1 62);
+  background: currentColor;
+  clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
+  filter: drop-shadow(0 2px 4px rgb(143 93 53 / 18%));
+}
+
+[data-visual="qr-orbit"]::before {
+  inset: -0.8rem -1rem;
+}
+
+[data-visual="qr-orbit"]::after {
+  top: -1rem;
+  right: 0.9rem;
+}
+
+@keyframes warm-orbit-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+[data-reveal] {
+  animation: warm-orbit-reveal 520ms ease-out both;
 }
 
 @keyframes status-pulse {
@@ -86,7 +148,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  [data-reveal],
   .status-pulse {
-    animation: none;
+    animation: none !important;
   }
 }

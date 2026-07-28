@@ -8,6 +8,8 @@ import {
   isSwuUnauthorizedError,
   submitCheckIn,
 } from "@/lib/swu";
+import { serviceUnavailableResponse } from "@/lib/service-http";
+import { isServiceEnabled } from "@/lib/service-status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +21,7 @@ async function getAuthenticatedSession() {
 }
 
 export async function GET(request: Request) {
+  if (!isServiceEnabled()) return serviceUnavailableResponse();
   const session = await getAuthenticatedSession();
   if (!session?.token) return NextResponse.json({ message: "请重新登录" }, { status: 401 });
 
@@ -35,6 +38,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!isServiceEnabled()) return serviceUnavailableResponse();
   if (!isSameOriginRequest(request)) {
     return NextResponse.json({ message: "请求来源无效" }, { status: 403 });
   }

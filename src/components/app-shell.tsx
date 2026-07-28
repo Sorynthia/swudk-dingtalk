@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import {
-  Check,
   CircleCheckBig,
   Clock3,
   GraduationCap,
@@ -14,9 +13,10 @@ import {
   ScanLine,
   Send,
   ShieldCheck,
+  Sparkles,
   Smartphone,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -105,17 +105,39 @@ async function readCheckInStatus(response: Response): Promise<CheckInStatus> {
 
 function Brand() {
   return (
-    <div className="flex items-center gap-3">
-      <span className="grid size-10 place-items-center rounded-md bg-primary text-primary-foreground shadow-sm">
+    <div className="flex items-center gap-2.5">
+      <span className="grid size-9 place-items-center rounded-xl bg-secondary text-primary shadow-[var(--shadow-neumorphic)] sm:size-10">
         <GraduationCap className="size-5" aria-hidden="true" />
       </span>
       <div>
-        <p className="text-[0.6875rem] font-semibold text-muted-foreground uppercase">
+        <p className="text-[0.625rem] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
           SWU Campus
         </p>
-        <p className="text-base font-semibold">西大寝签</p>
+        <p className="text-sm font-semibold sm:text-base">西大寝签</p>
       </div>
     </div>
+  );
+}
+
+interface SiteHeaderProps {
+  status: string;
+  actions?: ReactNode;
+}
+
+function SiteHeader({ status, actions }: SiteHeaderProps) {
+  return (
+    <header className="relative z-30 w-full">
+      <div className="flex min-h-14 items-center justify-between gap-3 rounded-full border border-white/60 bg-background/80 px-2.5 py-2 shadow-[var(--shadow-neumorphic)] backdrop-blur-xl sm:min-h-16 sm:px-3">
+        <Brand />
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="sr-only">{status}</span>
+          <Badge aria-hidden="true" variant="outline" className="hidden border-primary/20 bg-background/60 text-muted-foreground sm:inline-flex">
+            {status}
+          </Badge>
+          {actions}
+        </div>
+      </div>
+    </header>
   );
 }
 
@@ -156,42 +178,20 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
   const hasActiveQr = (stage === "waiting" || stage === "scanned") && Boolean(qrImage);
 
   return (
-    <main className="min-h-dvh sm:px-6 sm:py-6 lg:grid lg:place-items-center lg:px-10">
-      <section className="mx-auto grid min-h-dvh w-full max-w-6xl overflow-hidden bg-card sm:min-h-[calc(100dvh-3rem)] sm:rounded-lg sm:border sm:shadow-[0_24px_70px_-42px_rgba(55,37,31,0.45)] lg:min-h-[680px] lg:grid-cols-[0.92fr_1.08fr]">
-        <div className="relative hidden flex-col justify-between overflow-hidden bg-[#282421] p-12 text-white lg:flex">
-          <BrandPanelArt />
-          <div className="relative z-10 max-w-sm">
-            <Badge className="mb-6 border-white/15 bg-white/10 text-white hover:bg-white/10">
-              钉钉统一登录
-            </Badge>
-            <h1 className="text-4xl leading-tight font-semibold">
-              住宿信息与签到，
-              <br />一处完成。
-            </h1>
-            <p className="mt-5 max-w-xs text-sm leading-6 text-white/62">
-              登录后可查看登记住宿信息，并按需完成临时签到。
+    <main data-screen="login" className="min-h-dvh px-3 py-3 sm:px-6 sm:py-5">
+      <div className="mx-auto flex min-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col sm:min-h-[calc(100dvh-2.5rem)]">
+        <SiteHeader status="钉钉登录" />
+
+        <section className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center py-12 sm:py-16">
+          <div data-reveal className="mb-8 text-center">
+            <h1 className="text-balance text-3xl font-semibold sm:text-4xl">登录西大寝签</h1>
+            <p className="mt-4 text-sm leading-7 text-muted-foreground sm:text-base">
+              扫描二维码，并在钉钉中确认登录
             </p>
           </div>
-          <div className="relative z-10 flex items-center gap-2 text-xs text-white/45">
-            <ShieldCheck className="size-4" aria-hidden="true" />
-            由学校统一身份认证提供登录
-          </div>
-        </div>
 
-        <div className="flex min-h-full flex-col px-4 py-5 sm:px-10 sm:py-8 lg:px-16 lg:py-12">
-          <div className="flex items-center justify-between lg:hidden">
-            <Brand />
-            <Badge variant="outline" className="text-muted-foreground">安全登录</Badge>
-          </div>
-
-          <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-7 sm:py-12">
-            <div className="mb-6 text-center sm:mb-8">
-              <p className="mb-2 text-xs font-semibold text-primary">钉钉扫码</p>
-              <h2 className="text-2xl font-semibold sm:text-3xl">登录西大寝签</h2>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">扫描二维码，并在钉钉中确认登录</p>
-            </div>
-
-            <div className="relative mx-auto grid size-[min(19rem,calc(100vw-3rem))] place-items-center border bg-white p-3 shadow-sm sm:size-[21rem] sm:p-4">
+          <div data-visual="qr-orbit" data-reveal className="isolate mx-auto size-[min(18rem,calc(100vw-4rem))] sm:size-[20rem]">
+            <div className="relative z-10 grid size-full place-items-center rounded-2xl border border-white/70 bg-white p-3 shadow-[var(--shadow-panel)] sm:p-4">
               {hasActiveQr && qrImage ? (
                 <Image
                   src={qrImage}
@@ -212,7 +212,7 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
                   <ScanLine className="mb-4 size-10 text-muted-foreground" aria-hidden="true" />
                   <p className="font-medium">{stage === "expired" ? "二维码已过期" : "暂时无法登录"}</p>
                   <p className="mt-2 text-sm leading-5 text-muted-foreground">{message}</p>
-                  <Button className="mt-5" onClick={onRetry}>
+                  <Button variant="neumorphic" size="lg" className="mt-5" onClick={onRetry}>
                     <RefreshCw className="size-4" />
                     重新生成
                   </Button>
@@ -224,16 +224,17 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
                   <p className="mt-2 text-sm leading-5 text-muted-foreground">
                     二维码只在你准备扫码时创建
                   </p>
-                  <Button className="mt-5" onClick={onRetry}>
+                  <Button variant="neumorphic" size="lg" className="mt-5" onClick={onRetry}>
                     <QrCode className="size-4" />
                     生成登录二维码
                   </Button>
                 </div>
               )}
             </div>
+          </div>
 
             {(stage === "waiting" || stage === "scanned") && (
-              <div className="mt-6 flex min-h-12 items-center justify-center gap-3" aria-live="polite">
+              <div className="mt-8 flex min-h-12 items-center justify-center gap-3" aria-live="polite">
                 <span
                   className="status-pulse size-2 rounded-full bg-emerald-600"
                   aria-hidden="true"
@@ -252,37 +253,19 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
             )}
 
             {stage === "scanned" && (
-              <Alert className="mt-2 border-emerald-200 bg-emerald-50 text-emerald-950">
+              <Alert className="mt-2 max-w-md border-emerald-200 bg-emerald-50 text-emerald-950 shadow-sm">
                 <Smartphone className="size-4" />
                 <AlertTitle>已识别扫码</AlertTitle>
                 <AlertDescription>请返回钉钉完成授权，页面会自动继续。</AlertDescription>
               </Alert>
             )}
-          </div>
-
-          <p className="text-center text-xs leading-5 text-muted-foreground">
+          <p className="mt-8 flex items-center gap-2 text-center text-xs leading-5 text-muted-foreground">
+            <ShieldCheck className="size-3.5" aria-hidden="true" />
             请在本人设备上完成扫码登录
           </p>
-        </div>
-      </section>
+        </section>
+      </div>
     </main>
-  );
-}
-
-function BrandPanelArt() {
-  return (
-    <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-      <div className="absolute -top-28 -right-36 size-[30rem] rounded-full border border-white/8" />
-      <div className="absolute -top-12 -right-20 size-[22rem] rounded-full border border-white/8" />
-      <div className="absolute top-24 right-20 grid size-24 place-items-center rounded-full border border-white/10 text-white/12">
-        <GraduationCap className="size-10" />
-      </div>
-      <div className="absolute right-10 bottom-16 flex items-end gap-3 opacity-10">
-        {[48, 72, 56, 94, 64, 82].map((height, index) => (
-          <span key={index} className="w-7 border border-white" style={{ height }} />
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -405,17 +388,14 @@ function Dashboard({
   };
 
   return (
-    <div className="min-h-dvh bg-background">
-      <header className="border-b bg-background/95">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:h-18 sm:px-5 md:px-8">
-          <Brand />
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="hidden gap-1.5 text-muted-foreground sm:flex">
-              <Check className="size-3.5" />
-              已登录
-            </Badge>
+    <div data-screen="dashboard" className="min-h-dvh px-3 py-3 sm:px-6 sm:py-5">
+      <div className="mx-auto w-full max-w-4xl">
+        <SiteHeader
+          status="已登录"
+          actions={
+            <>
             <Button
-              variant="ghost"
+              variant="neumorphic"
               size="icon"
               onClick={refreshProfile}
               disabled={refreshing}
@@ -424,18 +404,18 @@ function Dashboard({
             >
               <RefreshCw className={refreshing ? "animate-spin" : ""} />
             </Button>
-            <Button variant="ghost" size="icon" onClick={handleLogout} disabled={loggingOut} aria-label="退出登录" title="退出登录">
+            <Button variant="neumorphic" size="icon" onClick={handleLogout} disabled={loggingOut} aria-label="退出登录" title="退出登录">
               {loggingOut ? <LoaderCircle className="animate-spin" /> : <LogOut />}
             </Button>
-          </div>
-        </div>
-      </header>
+            </>
+          }
+        />
 
-      <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-5 sm:py-9 md:px-8 md:py-12">
+      <main className="w-full px-1 py-8 sm:px-2 sm:py-12">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <Badge variant="secondary" className="mb-3 font-normal sm:mb-4">学号 {profile.studentId}</Badge>
-            <h1 className="text-2xl font-semibold sm:text-4xl">今日寝室签到</h1>
+            <h1 className="text-3xl font-semibold sm:text-4xl">今日寝室签到</h1>
             <p className="mt-3 text-sm text-muted-foreground">核对住宿信息后，完成今天的临时签到</p>
           </div>
           <p className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -458,8 +438,8 @@ function Dashboard({
           </Alert>
         )}
 
-        <section className="mt-7 grid overflow-hidden rounded-lg border bg-card shadow-sm sm:mt-8 lg:grid-cols-[1.08fr_0.92fr]" aria-label="临时签到和住宿详情">
-          <div className="p-5 sm:p-8 lg:border-r">
+        <section className="mt-7 grid gap-5 sm:mt-8 lg:grid-cols-[1.08fr_0.92fr]" aria-label="临时签到和住宿详情">
+          <div className="rounded-2xl border border-white/70 bg-card p-5 shadow-[var(--shadow-neumorphic)] sm:p-8">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-medium text-primary">今日状态</p>
@@ -504,6 +484,7 @@ function Dashboard({
             )}
 
             <Button
+              variant="neumorphic"
               size="lg"
               className="mt-8 w-full sm:w-auto"
               onClick={submitTemporaryCheckIn}
@@ -514,7 +495,7 @@ function Dashboard({
             </Button>
           </div>
 
-          <div className="border-t bg-muted/25 p-5 sm:p-8 lg:border-t-0">
+          <div className="rounded-2xl border border-white/70 bg-card p-5 shadow-[var(--shadow-neumorphic)] sm:p-8">
             <p className="text-xs font-medium text-muted-foreground">住宿档案</p>
             <h2 className="mt-2 text-xl font-semibold">{dormitory}</h2>
             <div className="mt-6 divide-y">
@@ -536,21 +517,46 @@ function Dashboard({
           <span>西大寝签 · 非学校官方应用</span>
         </footer>
       </main>
+      </div>
     </div>
   );
 }
 
-interface AppShellProps {
+function MaintenanceScreen() {
+  return (
+    <main data-service-state="disabled" className="min-h-dvh px-3 py-3 sm:px-6 sm:py-5">
+      <div className="mx-auto flex min-h-[calc(100dvh-1.5rem)] max-w-3xl flex-col sm:min-h-[calc(100dvh-2.5rem)]">
+        <SiteHeader status="服务关闭" />
+        <section data-reveal className="flex flex-1 flex-col items-center justify-center py-16 text-center">
+          <div data-visual="service-orbit" className="relative isolate grid size-44 place-items-center">
+            <Sparkles className="size-14 text-primary" aria-hidden="true" />
+          </div>
+          <p className="mt-8 text-xs font-semibold tracking-[0.2em] text-primary uppercase">SWU Campus</p>
+          <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">服务暂未开放</h1>
+          <p className="mt-4 max-w-md text-sm leading-7 text-muted-foreground sm:text-base">
+            当前暂不提供二维码登录、住宿查询与临时签到，请稍后再访问。
+          </p>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+interface EnabledAppShellProps {
   initialPayload: SessionPayload;
   initialCheckInStatus?: CheckInStatus;
   initialCheckInError?: string;
 }
 
-export default function AppShell({
+interface AppShellProps extends EnabledAppShellProps {
+  serviceEnabled: boolean;
+}
+
+function EnabledAppShell({
   initialPayload,
   initialCheckInStatus,
   initialCheckInError,
-}: AppShellProps) {
+}: EnabledAppShellProps) {
   const [stage, setStage] = useState<ViewStage>(() =>
     initialPayload.stage === "unauthenticated" ? "idle" : initialPayload.stage,
   );
@@ -706,4 +712,8 @@ export default function AppShell({
       onRetry={createQrCode}
     />
   );
+}
+
+export default function AppShell({ serviceEnabled, ...props }: AppShellProps) {
+  return serviceEnabled ? <EnabledAppShell {...props} /> : <MaintenanceScreen />;
 }

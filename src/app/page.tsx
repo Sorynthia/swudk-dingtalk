@@ -9,6 +9,7 @@ import {
 } from "@/lib/session-store";
 import { getCheckInStatus, isSwuUnauthorizedError } from "@/lib/swu";
 import type { CheckInStatus, SessionPayload } from "@/lib/types";
+import { isServiceEnabled } from "@/lib/service-status";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,10 @@ function getInitialPayload(session: LoginSession | undefined): SessionPayload {
 }
 
 export default async function HomePage() {
+  if (!isServiceEnabled()) {
+    return <AppShell serviceEnabled={false} initialPayload={{ stage: "unauthenticated" }} />;
+  }
+
   const cookieStore = await cookies();
   let session = getLoginSession(cookieStore.get(SESSION_COOKIE)?.value);
   let initialPayload = getInitialPayload(session);
@@ -47,6 +52,7 @@ export default async function HomePage() {
 
   return (
     <AppShell
+      serviceEnabled
       initialPayload={initialPayload}
       initialCheckInStatus={initialCheckInStatus}
       initialCheckInError={initialCheckInError}

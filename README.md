@@ -20,13 +20,16 @@ cp .env.example .env
 pnpm dev
 ```
 
-编辑 `.env`，将 `APP_ORIGIN` 设置为浏览器实际访问的来源，末尾不要添加 `/`；`PORT` 控制开发和生产服务的监听端口。`SESSION_SECRET` 是必填的会话加密密钥，应使用 `openssl rand -base64 32` 生成。`pnpm dev` 与 `pnpm start` 会在启动 Next.js 前自动加载该文件。
+编辑 `.env`，将 `APP_ORIGIN` 设置为浏览器实际访问的来源，末尾不要添加 `/`；`PORT` 控制开发和生产服务的监听端口。`SESSION_SECRET` 是必填的会话加密密钥，应使用 `openssl rand -base64 32` 生成。`SERVICE_ENABLED` 只有设置为 `true` 时才开放业务功能。`pnpm dev` 与 `pnpm start` 会在启动 Next.js 前自动加载该文件。
 
 ```env
+SERVICE_ENABLED=false
 APP_ORIGIN=https://example.com
 PORT=3001
 SESSION_SECRET=请替换为至少32字符的随机密钥
 ```
+
+服务默认关闭。需要开放二维码登录、住宿查询和临时签到时，将 `SERVICE_ENABLED` 改为 `true` 并重启应用。变量缺失、为空、为 `false` 或其他值时，首页只显示维护状态，业务 API 返回 HTTP `503`；退出登录仍可用于清理旧会话。
 
 生产环境先执行 `pnpm build`，再执行 `pnpm start`。示例配置对应端口为 `3001`。
 

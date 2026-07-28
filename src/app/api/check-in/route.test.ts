@@ -34,6 +34,7 @@ import { GET, POST } from "@/app/api/check-in/route";
 
 describe("签到接口并发保护", () => {
   beforeEach(() => {
+    process.env.SERVICE_ENABLED = "true";
     mocks.session.checkInPromise = undefined;
     mocks.getCheckInStatus.mockReset();
     mocks.invalidateSession.mockReset();

@@ -58,11 +58,14 @@ function renderAppShell(
 ) {
   hookState.stateCursor = 0;
   hookState.refCursor = 0;
-  return AppShell({
+  const element = AppShell({
+    serviceEnabled: true,
     initialPayload,
     initialCheckInStatus,
     initialCheckInError,
   });
+  const renderEnabled = element.type as (props: object) => ReactElement;
+  return renderEnabled(element.props);
 }
 
 describe("客户端会话切换", () => {
@@ -72,6 +75,19 @@ describe("客户端会话切换", () => {
     hookState.states.length = 0;
     hookState.refs.length = 0;
     vi.unstubAllGlobals();
+  });
+
+  it("服务关闭时只渲染维护界面", () => {
+    const maintenanceElement = AppShell({
+      serviceEnabled: false,
+      initialPayload: { stage: "unauthenticated" },
+    }) as ReactElement<Record<string, unknown>>;
+    const renderMaintenance = maintenanceElement.type as (
+      props: Record<string, unknown>,
+    ) => ReactElement<Record<string, unknown>>;
+    const maintenanceRoot = renderMaintenance(maintenanceElement.props);
+
+    expect(maintenanceRoot.props["data-service-state"]).toBe("disabled");
   });
 
   it("重新登录后不复用首次服务端渲染的签到状态", async () => {

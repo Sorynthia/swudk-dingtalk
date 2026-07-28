@@ -8,11 +8,14 @@ import {
 } from "@/lib/session-store";
 import { invalidateSession, isSameOriginRequest } from "@/lib/session-http";
 import { getStudentProfile, isSwuUnauthorizedError } from "@/lib/swu";
+import { serviceUnavailableResponse } from "@/lib/service-http";
+import { isServiceEnabled } from "@/lib/service-status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  if (!isServiceEnabled()) return serviceUnavailableResponse();
   if (!isSameOriginRequest(request)) {
     return NextResponse.json({ message: "请求来源无效" }, { status: 403 });
   }

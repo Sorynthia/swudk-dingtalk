@@ -3,11 +3,14 @@ import { NextResponse } from "next/server";
 
 import { pollDingTalkLogin } from "@/lib/dingtalk";
 import { getLoginSession, SESSION_COOKIE } from "@/lib/session-store";
+import { serviceUnavailableResponse } from "@/lib/service-http";
+import { isServiceEnabled } from "@/lib/service-status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (!isServiceEnabled()) return serviceUnavailableResponse();
   const cookieStore = await cookies();
   const session = getLoginSession(cookieStore.get(SESSION_COOKIE)?.value);
   if (!session) {

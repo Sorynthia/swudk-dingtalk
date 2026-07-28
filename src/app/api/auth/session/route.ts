@@ -8,11 +8,14 @@ import {
   SESSION_COOKIE,
 } from "@/lib/session-store";
 import { isSameOriginRequest } from "@/lib/session-http";
+import { serviceUnavailableResponse } from "@/lib/service-http";
+import { isServiceEnabled } from "@/lib/service-status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (!isServiceEnabled()) return serviceUnavailableResponse();
   const cookieStore = await cookies();
   const session = getLoginSession(cookieStore.get(SESSION_COOKIE)?.value);
   if (!session) return NextResponse.json({ stage: "unauthenticated" });

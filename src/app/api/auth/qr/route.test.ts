@@ -26,6 +26,7 @@ import { POST } from "@/app/api/auth/qr/route";
 
 describe("二维码会话替换", () => {
   beforeEach(() => {
+    process.env.SERVICE_ENABLED = "true";
     mocks.startDingTalkLogin.mockReset();
     mocks.deleteLoginSession.mockReset();
     mocks.getLoginSession.mockReset();
