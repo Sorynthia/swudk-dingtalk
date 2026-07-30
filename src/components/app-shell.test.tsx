@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CheckInStatus, SessionPayload, StudentProfile } from "@/lib/types";
@@ -88,6 +89,19 @@ describe("客户端会话切换", () => {
     const maintenanceRoot = renderMaintenance(maintenanceElement.props);
 
     expect(maintenanceRoot.props["data-service-state"]).toBe("disabled");
+  });
+
+  it("顶栏使用站点图标并显示扫码打卡品牌文字", () => {
+    const html = renderToStaticMarkup(
+      AppShell({
+        serviceEnabled: false,
+        initialPayload: { stage: "unauthenticated" },
+      }),
+    );
+
+    expect(html).toContain('src="/icon.svg"');
+    expect(html).toContain("钉钉扫码打卡");
+    expect(html).not.toContain("西大寝签");
   });
 
   it("重新登录后不复用首次服务端渲染的签到状态", async () => {

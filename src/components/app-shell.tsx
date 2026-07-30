@@ -4,7 +4,6 @@ import Image from "next/image";
 import {
   CircleCheckBig,
   Clock3,
-  GraduationCap,
   House,
   LoaderCircle,
   LogOut,
@@ -107,13 +106,19 @@ function Brand() {
   return (
     <div className="flex items-center gap-2.5">
       <span className="grid size-9 place-items-center rounded-xl bg-secondary text-primary shadow-[var(--shadow-neumorphic)] sm:size-10">
-        <GraduationCap className="size-5" aria-hidden="true" />
+        <Image
+          src="/icon.svg"
+          alt=""
+          width={40}
+          height={40}
+          className="size-full rounded-xl"
+        />
       </span>
       <div>
         <p className="text-[0.625rem] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
           SWU Campus
         </p>
-        <p className="text-sm font-semibold sm:text-base">西大寝签</p>
+        <p className="text-sm font-semibold sm:text-base">钉钉扫码打卡</p>
       </div>
     </div>
   );
