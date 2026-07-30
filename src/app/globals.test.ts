@@ -18,6 +18,9 @@ describe("星轨视觉样式", () => {
 
     expect(icon).toContain("<title>西大寝签</title>");
     expect(icon).toContain("#3b2b22");
+    expect(icon).toContain("#fff8ed");
     expect(icon).toContain("#dba76f");
+    expect(icon).toContain("M19 27v-6h6");
+    expect(icon).toContain("m25 32 5 5 9-11");
   });
 });

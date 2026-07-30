@@ -2,7 +2,7 @@
   <title>西大寝签</title>
   <rect x="2" y="2" width="60" height="60" rx="16" fill="#3b2b22" />
   <path
-    d="M13 26 32 16l19 10-19 10-19-10Z"
+    d="M19 27v-6h6M39 21h6v6M45 37v6h-6M25 43h-6v-6"
     fill="none"
     stroke="#fff8ed"
     stroke-linecap="round"
@@ -10,12 +10,12 @@
     stroke-width="4"
   />
   <path
-    d="M21 31v10c3 5 19 5 22 0V31M51 27v13"
+    d="m25 32 5 5 9-11"
     fill="none"
     stroke="#fff8ed"
     stroke-linecap="round"
     stroke-linejoin="round"
-    stroke-width="4"
+    stroke-width="4.5"
   />
   <path
     d="M48 11v8M44 15h8"
