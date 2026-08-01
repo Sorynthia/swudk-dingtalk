@@ -45,9 +45,14 @@ describe("本机会话存储", () => {
       qrCode: "temporary-code",
       goto: "https://oapi.dingtalk.com/connect/oauth2/sns_authorize",
       appId: "temporary-app",
-      cookies: new Map([
-        ["https://login.dingtalk.com", new Map([["temporary-cookie", "value"]])],
-      ]),
+      cookies: [{
+        name: "temporary-cookie",
+        value: "value",
+        domain: "login.dingtalk.com",
+        path: "/",
+        hostOnly: true,
+        secure: true,
+      }],
     });
     store.authenticateSession(session, "test-secret-token", {
       studentId: "20260001",
@@ -55,7 +60,7 @@ describe("本机会话存储", () => {
       updatedAt: new Date().toISOString(),
     });
     expect(session).toMatchObject({ qrImage: "", qrCode: "", goto: "", appId: "" });
-    expect(session.cookies.size).toBe(0);
+    expect(session.cookies.length).toBe(0);
 
     const sessionPath = join(dataDirectory, `${session.id}.session`);
     expect(readFileSync(sessionPath, "utf8")).not.toContain("test-secret-token");
@@ -74,6 +79,33 @@ describe("本机会话存储", () => {
     expect(existsSync(sessionPath)).toBe(false);
   });
 
+  it("主动清理过期和损坏的孤立会话文件", async () => {
+    const { store, dataDirectory } = await loadIsolatedStore();
+    const expiredSession = store.createLoginSession({
+      expiresAt: Date.now() + store.LOGIN_TTL_MS,
+      stage: "waiting",
+      message: "测试",
+      qrImage: "",
+      qrCode: "",
+      goto: "",
+      appId: "",
+      cookies: [],
+    });
+    store.authenticateSession(expiredSession, "test-token", {
+      studentId: "20260001",
+      dormitory: null,
+      updatedAt: new Date().toISOString(),
+    });
+    const expiredPath = join(dataDirectory, `${expiredSession.id}.session`);
+    const damagedPath = join(dataDirectory, `${randomUUID()}.session`);
+    writeFileSync(damagedPath, "damaged", "utf8");
+
+    store.sweepPersistedSessionsForTests(Date.now() + 8 * 24 * 60 * 60 * 1000);
+
+    expect(existsSync(expiredPath)).toBe(false);
+    expect(existsSync(damagedPath)).toBe(false);
+  });
+
   it("待扫码会话超时后返回 expired 状态", async () => {
     const { store } = await loadIsolatedStore();
     const session = store.createLoginSession({
@@ -84,7 +116,7 @@ describe("本机会话存储", () => {
       qrCode: "code",
       goto: "goto",
       appId: "app",
-      cookies: new Map(),
+      cookies: [],
     });
 
     expect(store.getLoginSession(session.id)).toMatchObject({
@@ -143,7 +175,7 @@ describe("本机会话存储", () => {
       qrCode: "",
       goto: "",
       appId: "",
-      cookies: new Map(),
+      cookies: [],
     });
 
     const originalExpiresAt = session.expiresAt;
@@ -172,7 +204,7 @@ describe("本机会话存储", () => {
       qrCode: "code",
       goto: "goto",
       appId: "app",
-      cookies: new Map(),
+      cookies: [],
     });
 
     expect(() => store.authenticateSession(session, "test-token", {
@@ -194,7 +226,7 @@ describe("本机会话存储", () => {
       qrCode: "",
       goto: "",
       appId: "",
-      cookies: new Map(),
+      cookies: [],
     });
     store.authenticateSession(session, "test-token", {
       studentId: "20260001",
@@ -225,7 +257,7 @@ describe("本机会话存储", () => {
       qrCode: "",
       goto: "",
       appId: "",
-      cookies: new Map(),
+      cookies: [],
     });
 
     store.deleteLoginSession(session.id);

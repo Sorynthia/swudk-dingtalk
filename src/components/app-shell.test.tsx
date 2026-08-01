@@ -40,7 +40,7 @@ vi.mock("react", async (importOriginal) => {
   };
 });
 
-import AppShell from "@/components/app-shell";
+import AppShell, { readPayload } from "@/components/app-shell";
 
 interface DashboardProps {
   initialCheckInStatus?: CheckInStatus;
@@ -70,6 +70,15 @@ function renderAppShell(
 }
 
 describe("客户端会话切换", () => {
+  it("拒绝只有错误消息但缺少会话状态的 API 响应", async () => {
+    const response = new Response(JSON.stringify({ message: "服务暂未开放，请稍后再试" }), {
+      status: 503,
+      headers: { "Content-Type": "application/json" },
+    });
+
+    await expect(readPayload(response)).rejects.toThrow("服务暂未开放，请稍后再试");
+  });
+
   beforeEach(() => {
     hookState.stateCursor = 0;
     hookState.refCursor = 0;

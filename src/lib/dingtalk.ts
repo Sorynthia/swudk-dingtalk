@@ -27,6 +27,13 @@ const ALLOWED_LOGIN_ORIGINS = new Set([
   "https://of.swu.edu.cn",
 ]);
 const MAX_CONSECUTIVE_POLL_FAILURES = 3;
+const ALLOWED_COOKIE_DOMAINS = new Set([
+  "login.dingtalk.com",
+  "oapi.dingtalk.com",
+  "dingtalk.com",
+  "of.swu.edu.cn",
+  "swu.edu.cn",
+]);
 
 const DEFAULT_HEADERS = {
   "User-Agent":
@@ -59,24 +66,84 @@ export function assertAllowedLoginUrl(url: string) {
   return parsed.toString();
 }
 
+function defaultCookiePath(pathname: string) {
+  if (!pathname.startsWith("/") || pathname === "/") return "/";
+  const lastSlash = pathname.lastIndexOf("/");
+  return lastSlash <= 0 ? "/" : pathname.slice(0, lastSlash);
+}
+
+function domainMatches(hostname: string, domain: string, hostOnly: boolean) {
+  return hostOnly ? hostname === domain : hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
+function pathMatches(pathname: string, cookiePath: string) {
+  return pathname === cookiePath || (
+    pathname.startsWith(cookiePath) &&
+    (cookiePath.endsWith("/") || pathname.charAt(cookiePath.length) === "/")
+  );
+}
+
 function absorbCookies(
   session: Pick<LoginSession, "cookies">,
   requestUrl: string,
   response: Response,
 ) {
   const headers = response.headers as Headers & { getSetCookie?: () => string[] };
-  const setCookies = headers.getSetCookie?.call(response.headers) ?? [];
+  const setCookies = headers.getSetCookie?.call(response.headers)
+    ?? (response.headers.get("set-cookie") ? [response.headers.get("set-cookie") as string] : []);
   if (setCookies.length === 0) return;
 
-  const origin = new URL(requestUrl).origin;
-  const originCookies = session.cookies.get(origin) ?? new Map<string, string>();
-  session.cookies.set(origin, originCookies);
-
+  const request = new URL(requestUrl);
   for (const value of setCookies) {
-    const [pair] = value.split(";", 1);
-    const separator = pair.indexOf("=");
+    const parts = value.split(";").map((part) => part.trim());
+    const separator = parts[0]?.indexOf("=") ?? -1;
     if (separator <= 0) continue;
-    originCookies.set(pair.slice(0, separator), pair.slice(separator + 1));
+    const name = parts[0].slice(0, separator);
+    const cookieValue = parts[0].slice(separator + 1);
+    let domain = request.hostname.toLowerCase();
+    let hostOnly = true;
+    let path = defaultCookiePath(request.pathname);
+    let secure = false;
+    let expiresAt: number | undefined;
+
+    for (const attribute of parts.slice(1)) {
+      const attributeSeparator = attribute.indexOf("=");
+      const key = (attributeSeparator < 0 ? attribute : attribute.slice(0, attributeSeparator)).toLowerCase();
+      const attributeValue = attributeSeparator < 0 ? "" : attribute.slice(attributeSeparator + 1).trim();
+      if (key === "domain" && attributeValue) {
+        const candidate = attributeValue.replace(/^\./, "").toLowerCase();
+        if (
+          !ALLOWED_COOKIE_DOMAINS.has(candidate) ||
+          !domainMatches(request.hostname.toLowerCase(), candidate, false)
+        ) {
+          domain = "";
+          break;
+        }
+        domain = candidate;
+        hostOnly = false;
+      } else if (key === "path" && attributeValue.startsWith("/")) {
+        path = attributeValue;
+      } else if (key === "secure") {
+        secure = true;
+      } else if (key === "max-age" && /^-?\d+$/.test(attributeValue)) {
+        expiresAt = Date.now() + Number(attributeValue) * 1000;
+      } else if (key === "expires" && expiresAt === undefined) {
+        const parsed = Date.parse(attributeValue);
+        if (!Number.isNaN(parsed)) expiresAt = parsed;
+      }
+    }
+    if (!domain) continue;
+
+    const index = session.cookies.findIndex((cookie) =>
+      cookie.name === name && cookie.domain === domain && cookie.path === path,
+    );
+    if (!cookieValue || (expiresAt !== undefined && expiresAt <= Date.now())) {
+      if (index >= 0) session.cookies.splice(index, 1);
+      continue;
+    }
+    const cookie = { name, value: cookieValue, domain, path, hostOnly, secure, expiresAt };
+    if (index >= 0) session.cookies[index] = cookie;
+    else session.cookies.push(cookie);
   }
 }
 
@@ -86,10 +153,18 @@ async function requestWithCookies(
   init: RequestInit = {},
 ) {
   const safeUrl = assertAllowedLoginUrl(url);
-  const originCookies = session.cookies.get(new URL(safeUrl).origin);
-  const cookie = originCookies
-    ? [...originCookies].map(([key, value]) => `${key}=${value}`).join("; ")
-    : "";
+  const parsedUrl = new URL(safeUrl);
+  const now = Date.now();
+  session.cookies = session.cookies.filter((cookie) => cookie.expiresAt === undefined || cookie.expiresAt > now);
+  const cookie = session.cookies
+    .filter((item) =>
+      domainMatches(parsedUrl.hostname.toLowerCase(), item.domain, item.hostOnly) &&
+      pathMatches(parsedUrl.pathname, item.path) &&
+      (!item.secure || parsedUrl.protocol === "https:"),
+    )
+    .sort((left, right) => right.path.length - left.path.length)
+    .map((item) => `${item.name}=${item.value}`)
+    .join("; ");
   const headers = new Headers(DEFAULT_HEADERS);
   new Headers(init.headers).forEach((value, key) => headers.set(key, value));
   if (cookie) headers.set("Cookie", cookie);
@@ -145,7 +220,7 @@ async function readJson<T>(response: Response, context: string): Promise<T> {
 }
 
 export async function startDingTalkLogin() {
-  const pendingSession: Pick<LoginSession, "cookies"> = { cookies: new Map() };
+  const pendingSession: Pick<LoginSession, "cookies"> = { cookies: [] };
   const { url: redirectUrl } = await followRedirects(pendingSession, LOGIN_URL);
   const state = extractState(redirectUrl);
   const goto =

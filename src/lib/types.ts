@@ -13,7 +13,7 @@ export interface StudentProfile {
   updatedAt: string;
 }
 
-export type CheckInState = "available" | "checked_in" | "not_required" | "on_leave";
+export type CheckInState = "available" | "checked_in" | "not_required" | "on_leave" | "unavailable";
 
 export interface CheckInStatus {
   state: CheckInState;

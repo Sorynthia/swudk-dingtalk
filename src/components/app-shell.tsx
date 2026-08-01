@@ -82,10 +82,32 @@ function formatRemainingTime(seconds: number) {
   return `${minutes} 分 ${remainingSeconds} 秒`;
 }
 
-async function readPayload(response: Response): Promise<SessionPayload> {
-  const payload = (await response.json()) as SessionPayload;
-  if (!response.ok && !payload.message) throw new Error("服务暂时不可用");
-  return payload;
+const SESSION_STAGES = new Set<SessionPayload["stage"]>([
+  "waiting",
+  "scanned",
+  "authenticated",
+  "expired",
+  "error",
+  "unauthenticated",
+]);
+
+/** @internal 仅导出以覆盖接口响应校验测试。 */
+export async function readPayload(response: Response): Promise<SessionPayload> {
+  let value: unknown;
+  try {
+    value = await response.json();
+  } catch {
+    throw new Error("服务返回了无法解析的数据");
+  }
+  const payload = value && typeof value === "object" ? value as Record<string, unknown> : undefined;
+  const message = typeof payload?.message === "string" ? payload.message : undefined;
+  if (!payload || !SESSION_STAGES.has(payload.stage as SessionPayload["stage"])) {
+    throw new Error(message || "服务返回了无效状态");
+  }
+  if (!response.ok && payload.stage !== "unauthenticated" && payload.stage !== "error") {
+    throw new Error(message || "服务暂时不可用");
+  }
+  return payload as unknown as SessionPayload;
 }
 
 class SessionExpiredError extends Error {
@@ -304,6 +326,7 @@ function Dashboard({
   const updatedAt = useMemo(() => formatUpdatedTime(profile.updatedAt), [profile.updatedAt]);
 
   const loadCheckInStatus = useCallback(async () => {
+    setStatusLoading(true);
     try {
       const status = await readCheckInStatus(await fetch("/api/check-in", { cache: "no-store" }));
       setCheckInError(undefined);
@@ -452,7 +475,13 @@ function Dashboard({
               </div>
               {checkInStatus && !statusLoading && (
                 <Badge variant={checkInStatus.state === "checked_in" ? "default" : "secondary"}>
-                  {checkInStatus.state === "available" ? "待签到" : checkInStatus.state === "checked_in" ? "已完成" : "无需签到"}
+                  {checkInStatus.state === "available"
+                    ? "待签到"
+                    : checkInStatus.state === "checked_in"
+                      ? "已完成"
+                      : checkInStatus.state === "unavailable"
+                        ? "不可签到"
+                        : "无需签到"}
                 </Badge>
               )}
             </div>
@@ -577,9 +606,14 @@ function EnabledAppShell({
   const applyPayload = useCallback((payload: SessionPayload) => {
     setStage(payload.stage);
     setMessage(payload.message);
-    if (payload.qrImage !== undefined) setQrImage(payload.qrImage);
-    if (payload.expiresAt !== undefined) setExpiresAt(payload.expiresAt);
-    if (payload.profile) setProfile(payload.profile);
+    if (payload.stage === "waiting" || payload.stage === "scanned") {
+      if (payload.qrImage !== undefined) setQrImage(payload.qrImage);
+      if (payload.expiresAt !== undefined) setExpiresAt(payload.expiresAt);
+    } else {
+      setQrImage(undefined);
+      setExpiresAt(undefined);
+    }
+    setProfile(payload.stage === "authenticated" ? payload.profile : undefined);
   }, []);
 
   const createQrCode = useCallback(async () => {

@@ -11,6 +11,9 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
+  renameSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -26,8 +29,22 @@ const DEFAULT_DATA_DIRECTORY = join(/*turbopackIgnore: true*/ process.cwd(), ".d
 const DATA_DIRECTORY = process.env.SESSION_DATA_DIR
   ? resolve(process.env.SESSION_DATA_DIR)
   : DEFAULT_DATA_DIRECTORY;
+const SESSION_FILE_PATTERN = /^([0-9a-f-]{36})\.session$/i;
+const SESSION_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+const MAX_PERSISTED_SESSION_FILES = 5_000;
+let lastSessionSweepAt = 0;
 
-export type LoginCookieStore = Map<string, Map<string, string>>;
+export interface LoginCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  hostOnly: boolean;
+  secure: boolean;
+  expiresAt?: number;
+}
+
+export type LoginCookieStore = LoginCookie[];
 
 interface PersistedSession {
   version: 2;
@@ -135,6 +152,73 @@ function normalizeProfile(value: unknown): StudentProfile | undefined {
   return { studentId: profile.studentId, dormitory, updatedAt: profile.updatedAt };
 }
 
+function sweepPersistedSessions(now = Date.now(), force = false) {
+  if (!force && now - lastSessionSweepAt < SESSION_SWEEP_INTERVAL_MS) return;
+  lastSessionSweepAt = now;
+  if (!existsSync(DATA_DIRECTORY)) return;
+
+  try {
+    getEncryptionKey();
+  } catch {
+    return;
+  }
+
+  const validFiles: Array<{ path: string; modifiedAt: number }> = [];
+  for (const entry of readdirSync(DATA_DIRECTORY, { withFileTypes: true })) {
+    const path = join(DATA_DIRECTORY, entry.name);
+    if (entry.isFile() && entry.name.endsWith(".tmp")) {
+      try {
+        if (statSync(path).mtimeMs < now - SESSION_SWEEP_INTERVAL_MS) unlinkSync(path);
+      } catch {
+        // 下一轮清理时重试。
+      }
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const match = SESSION_FILE_PATTERN.exec(entry.name);
+    if (!match || !SESSION_ID_PATTERN.test(match[1])) continue;
+
+    try {
+      const persisted = openSession(readFileSync(path, "utf8"));
+      if (
+        persisted.version !== 2 ||
+        persisted.id !== match[1] ||
+        typeof persisted.expiresAt !== "number" ||
+        persisted.expiresAt <= now ||
+        typeof persisted.token !== "string" ||
+        !persisted.token ||
+        !normalizeProfile(persisted.profile)
+      ) {
+        unlinkSync(path);
+      } else {
+        validFiles.push({ path, modifiedAt: statSync(path).mtimeMs });
+      }
+    } catch {
+      try {
+        unlinkSync(path);
+      } catch {
+        // 下一轮清理时重试。
+      }
+    }
+  }
+
+  validFiles
+    .sort((left, right) => right.modifiedAt - left.modifiedAt)
+    .slice(MAX_PERSISTED_SESSION_FILES)
+    .forEach(({ path }) => {
+      try {
+        unlinkSync(path);
+      } catch {
+        // 下一轮清理时重试。
+      }
+    });
+}
+
+/** @internal 仅导出以覆盖持久化清理测试。 */
+export function sweepPersistedSessionsForTests(now = Date.now()) {
+  sweepPersistedSessions(now, true);
+}
+
 function loadPersistedSession(id: string): LoginSession | undefined {
   if (!SESSION_ID_PATTERN.test(id)) return undefined;
   const path = persistedSessionPath(id);
@@ -166,7 +250,7 @@ function loadPersistedSession(id: string): LoginSession | undefined {
       qrCode: "",
       goto: "",
       appId: "",
-      cookies: new Map(),
+      cookies: [],
       token: persisted.token,
       profile,
     };
@@ -189,6 +273,7 @@ function clearExpiredSessions(now = Date.now()) {
 
 export function createLoginSession(initial: Omit<LoginSession, "id" | "createdAt">) {
   clearExpiredSessions();
+  sweepPersistedSessions();
   const session: LoginSession = {
     ...initial,
     id: randomUUID(),
@@ -199,6 +284,7 @@ export function createLoginSession(initial: Omit<LoginSession, "id" | "createdAt
 }
 
 export function getLoginSession(id: string | undefined) {
+  sweepPersistedSessions();
   if (!id) return undefined;
   const session = sessions.get(id) ?? loadPersistedSession(id);
   if (!session) return undefined;
@@ -221,7 +307,7 @@ export function clearPendingLoginData(session: LoginSession) {
   session.qrCode = "";
   session.goto = "";
   session.appId = "";
-  session.cookies.clear();
+  session.cookies.length = 0;
   session.pollFailureCount = undefined;
 }
 
@@ -233,18 +319,27 @@ function writeAuthenticatedSession(
 ) {
   if (sessions.get(session.id) !== session) return false;
   ensureDataDirectory();
-  writeFileSync(
-    persistedSessionPath(session.id),
-    sealSession({
-      version: 2,
-      id: session.id,
-      createdAt: session.createdAt,
-      expiresAt,
-      token,
-      profile,
-    }),
-    { encoding: "utf8", mode: 0o600 },
-  );
+  sweepPersistedSessions();
+  const destinationPath = persistedSessionPath(session.id);
+  const temporaryPath = `${destinationPath}.${randomBytes(8).toString("hex")}.tmp`;
+  try {
+    writeFileSync(
+      temporaryPath,
+      sealSession({
+        version: 2,
+        id: session.id,
+        createdAt: session.createdAt,
+        expiresAt,
+        token,
+        profile,
+      }),
+      { encoding: "utf8", mode: 0o600, flag: "wx" },
+    );
+    renameSync(temporaryPath, destinationPath);
+  } catch (error) {
+    if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+    throw error;
+  }
   return true;
 }
 
@@ -281,8 +376,22 @@ export function deleteLoginSession(id: string | undefined) {
 }
 
 export function getSessionCookieOptions(request: Request) {
-  const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",", 1)[0].trim();
-  const secure = forwardedProtocol ? forwardedProtocol === "https" : new URL(request.url).protocol === "https:";
+  const configuredProtocol = (() => {
+    try {
+      return process.env.APP_ORIGIN ? new URL(process.env.APP_ORIGIN).protocol : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+  const trustProxy = process.env.TRUST_PROXY?.trim().toLowerCase() === "true";
+  const forwardedProtocol = trustProxy
+    ? request.headers.get("x-forwarded-proto")?.split(",", 1)[0].trim()
+    : undefined;
+  const secure = configuredProtocol
+    ? configuredProtocol === "https:"
+    : forwardedProtocol
+      ? forwardedProtocol === "https"
+      : new URL(request.url).protocol === "https:";
 
   return {
     httpOnly: true,

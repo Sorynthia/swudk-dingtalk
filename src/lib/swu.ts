@@ -5,7 +5,9 @@ import type { ApiRecord, CheckInStatus, StudentProfile } from "@/lib/types";
 const USER_URL = "https://of.swu.edu.cn/gateway/fighter-middle/api/auth/user?appType=fighter-portal";
 const DORMITORY_URL = "https://of.swu.edu.cn/gateway/fighter-baida/api/cqlc/getDormitory";
 const TRANSITION_URL = "https://of.swu.edu.cn/gateway/fighter-baida/api/cqtj/getTransitionByToday";
-const LEAVE_URL = "https://of.swu.edu.cn/gateway/fighter-baida/api/xsqjxj/listSelfLeaveData?pageNum=1&pageSize=10";
+const LEAVE_URL = "https://of.swu.edu.cn/gateway/fighter-baida/api/xsqjxj/listSelfLeaveData";
+const LEAVE_PAGE_SIZE = 100;
+const MAX_LEAVE_PAGES = 20;
 const CHECK_IN_URL = "https://of.swu.edu.cn/gateway/fighter-baida/api/form-instance/save";
 
 interface UserResponse extends DataResponse {
@@ -118,6 +120,36 @@ function formatChinaDate(now = new Date()) {
     .replaceAll("/", "-");
 }
 
+function normalizeCheckInWindow(value: unknown): [string, string] | undefined {
+  if (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    value.every((part) => typeof part === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(part))
+  ) return [value[0] as string, value[1] as string];
+  return undefined;
+}
+
+function isWithinChinaTimeWindow(window: [string, string], now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Shanghai",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  const currentMinutes = hour * 60 + minute;
+  const toMinutes = (value: string) => {
+    const [windowHour, windowMinute] = value.split(":").map(Number);
+    return windowHour * 60 + windowMinute;
+  };
+  const start = toMinutes(window[0]);
+  const end = toMinutes(window[1]);
+  return start <= end
+    ? start <= currentMinutes && currentMinutes <= end
+    : currentMinutes >= start || currentMinutes <= end;
+}
+
 async function getDormitory(token: string) {
   const payload = await fetchJson<DataResponse>(DORMITORY_URL, token, {
     method: "POST",
@@ -128,17 +160,30 @@ async function getDormitory(token: string) {
   return asRecord(payload.data);
 }
 
+async function hasActiveApprovedLeave(token: string, now: Date) {
+  for (let pageNum = 1; pageNum <= MAX_LEAVE_PAGES; pageNum += 1) {
+    const url = new URL(LEAVE_URL);
+    url.searchParams.set("pageNum", String(pageNum));
+    url.searchParams.set("pageSize", String(LEAVE_PAGE_SIZE));
+    const payload = await fetchJson<DataResponse>(url.toString(), token);
+    assertBusinessSuccess(payload, "请假信息查询");
+    const records = recordsFrom(payload);
+    const active = records.some((leave) => {
+      if (leave.lcztmc !== "已同意") return false;
+      const startTime = parseChinaTime(leave.kssj);
+      const endTime = parseChinaTime(leave.jssj);
+      return Boolean(startTime && endTime && startTime <= now && now <= endTime);
+    });
+    if (active) return true;
+    if (records.length < LEAVE_PAGE_SIZE) return false;
+  }
+  throw new Error("请假记录过多，无法完整确认今日状态");
+}
+
 async function getTodayCheckInContext(token: string): Promise<CheckInContext> {
-  const leavePayload = await fetchJson<DataResponse>(LEAVE_URL, token);
-  assertBusinessSuccess(leavePayload, "请假信息查询");
-  const latestLeave = recordsFrom(leavePayload)[0];
-  if (latestLeave?.lcztmc === "已同意") {
-    const startTime = parseChinaTime(latestLeave.kssj);
-    const endTime = parseChinaTime(latestLeave.jssj);
-    const now = new Date();
-    if (startTime && endTime && startTime <= now && now <= endTime) {
-      return { status: { state: "on_leave", message: "当前处于已批准的请假时段，无需签到" } };
-    }
+  const now = new Date();
+  if (await hasActiveApprovedLeave(token, now)) {
+    return { status: { state: "on_leave", message: "当前处于已批准的请假时段，无需签到" } };
   }
 
   const transitionPayload = await fetchJson<DataResponse>(TRANSITION_URL, token, {
@@ -153,6 +198,29 @@ async function getTodayCheckInContext(token: string): Promise<CheckInContext> {
   }
   if (task.qdzt === "已签到") {
     return { status: { state: "checked_in", message: "今日临时签到已完成" }, task };
+  }
+  if (task.qdzt !== "未签到") {
+    const taskState = typeof task.qdzt === "string" && task.qdzt.trim() ? task.qdzt.trim() : "未知";
+    return {
+      status: { state: "unavailable", message: `当前签到任务状态为“${taskState}”，不可提交` },
+      task,
+    };
+  }
+  const checkInWindow = normalizeCheckInWindow(task.qdsj);
+  if (!checkInWindow) {
+    return {
+      status: { state: "unavailable", message: "签到任务缺少有效的开放时间，不可提交" },
+      task,
+    };
+  }
+  if (!isWithinChinaTimeWindow(checkInWindow)) {
+    return {
+      status: {
+        state: "unavailable",
+        message: `签到开放时间为 ${checkInWindow[0]}–${checkInWindow[1]}`,
+      },
+      task,
+    };
   }
   return { status: { state: "available", message: "当前可以进行临时签到" }, task };
 }
@@ -238,6 +306,8 @@ export async function submitCheckIn(token: string): Promise<CheckInStatus> {
 
   const formId = requireString(context.task.formId, "签到任务缺少 formId");
   const taskId = requireString(context.task.id, "签到任务缺少 id");
+  const checkInWindow = normalizeCheckInWindow(context.task.qdsj);
+  if (!checkInWindow) throw new Error("签到任务缺少有效的开放时间");
   const [userPayload, dormitory] = await Promise.all([
     fetchJson<UserResponse>(USER_URL, token),
     getDormitory(token),
@@ -275,7 +345,7 @@ export async function submitCheckIn(token: string): Promise<CheckInStatus> {
       formId,
       tsrq: formatChinaDate(),
       xh: studentId,
-      qdsj: ["21:00", "23:30"],
+      qdsj: checkInWindow,
       qsqddd: address,
       qdbj: checkInRadius,
       qddz: {
