@@ -140,7 +140,7 @@ function Brand() {
         <p className="text-[0.625rem] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
           SWU Campus
         </p>
-        <p className="text-sm font-semibold sm:text-base">钉钉扫码打卡</p>
+        <p className="text-sm font-semibold sm:text-base">SWU钉钉扫码打卡</p>
       </div>
     </div>
   );
@@ -211,7 +211,7 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
 
         <section className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center py-12 sm:py-16">
           <div data-reveal className="mb-8 text-center">
-            <h1 className="text-balance text-3xl font-semibold sm:text-4xl">登录西大寝签</h1>
+            <h1 className="text-balance text-3xl font-semibold sm:text-4xl">登录 SWU钉钉扫码打卡</h1>
             <p className="mt-4 text-sm leading-7 text-muted-foreground sm:text-base">
               扫描二维码，并在钉钉中确认登录
             </p>
@@ -548,7 +548,7 @@ function Dashboard({
 
         <Separator className="mt-8 sm:mt-12" />
         <footer className="flex flex-col gap-2 py-6 text-xs leading-5 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <span>西大寝签 · 非学校官方应用</span>
+          <span>SWU钉钉扫码打卡 · 非学校官方应用</span>
         </footer>
       </main>
       </div>
