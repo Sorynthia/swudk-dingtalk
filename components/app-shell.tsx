@@ -126,22 +126,9 @@ async function readCheckInStatus(response: Response): Promise<CheckInStatus> {
 
 function Brand() {
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="grid size-9 place-items-center rounded-xl bg-secondary text-primary shadow-[var(--shadow-neumorphic)] sm:size-10">
-        <Image
-          src="/icon.svg"
-          alt=""
-          width={40}
-          height={40}
-          className="size-full rounded-xl"
-        />
-      </span>
-      <div>
-        <p className="text-[0.625rem] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-          SWU Campus
-        </p>
-        <p className="text-sm font-semibold sm:text-base">SWU钉钉扫码打卡</p>
-      </div>
+    <div className="flex items-center gap-2 px-2 py-1.5 text-sm font-semibold tracking-[0.04em]">
+      <Image src="/icon.svg" alt="" width={28} height={28} aria-hidden />
+      <span>SWU钉钉扫码打卡</span>
     </div>
   );
 }
@@ -153,8 +140,8 @@ interface SiteHeaderProps {
 
 function SiteHeader({ status, actions }: SiteHeaderProps) {
   return (
-    <header className="relative z-30 w-full">
-      <div className="flex min-h-14 items-center justify-between gap-3 rounded-full border border-white/60 bg-background/80 px-2.5 py-2 shadow-[var(--shadow-neumorphic)] backdrop-blur-xl sm:min-h-16 sm:px-3">
+    <header className="sticky top-0 z-50 px-3 pt-3 sm:px-5 sm:pt-4">
+      <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-3 rounded-full border border-white/60 bg-background/80 px-2.5 shadow-[var(--shadow-neumorphic)] backdrop-blur-xl sm:h-16 sm:px-3">
         <Brand />
         <div className="flex shrink-0 items-center gap-1.5">
           <span className="sr-only">{status}</span>
@@ -205,11 +192,11 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
   const hasActiveQr = (stage === "waiting" || stage === "scanned") && Boolean(qrImage);
 
   return (
-    <main data-screen="login" className="min-h-dvh px-3 py-3 sm:px-6 sm:py-5">
-      <div className="mx-auto flex min-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col sm:min-h-[calc(100dvh-2.5rem)]">
+    <main data-screen="login" className="min-h-dvh">
+      <div className="flex min-h-dvh flex-col">
         <SiteHeader status="钉钉登录" />
 
-        <section className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center py-12 sm:py-16">
+        <section className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-3 py-12 sm:px-6 sm:py-16">
           <div data-reveal className="mb-8 text-center">
             <h1 className="text-balance text-3xl font-semibold sm:text-4xl">登录 SWU钉钉扫码打卡</h1>
             <p className="mt-4 text-sm leading-7 text-muted-foreground sm:text-base">
@@ -416,9 +403,8 @@ function Dashboard({
   };
 
   return (
-    <div data-screen="dashboard" className="min-h-dvh px-3 py-3 sm:px-6 sm:py-5">
-      <div className="mx-auto w-full max-w-4xl">
-        <SiteHeader
+    <div data-screen="dashboard" className="min-h-dvh">
+      <SiteHeader
           status="已登录"
           actions={
             <>
@@ -439,6 +425,7 @@ function Dashboard({
           }
         />
 
+      <div className="mx-auto w-full max-w-4xl px-3 sm:px-6">
       <main className="w-full px-1 py-8 sm:px-2 sm:py-12">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -558,15 +545,14 @@ function Dashboard({
 
 function MaintenanceScreen() {
   return (
-    <main data-service-state="disabled" className="min-h-dvh px-3 py-3 sm:px-6 sm:py-5">
-      <div className="mx-auto flex min-h-[calc(100dvh-1.5rem)] max-w-3xl flex-col sm:min-h-[calc(100dvh-2.5rem)]">
+    <main data-service-state="disabled" className="min-h-dvh">
+      <div className="flex min-h-dvh flex-col">
         <SiteHeader status="服务关闭" />
-        <section data-reveal className="flex flex-1 flex-col items-center justify-center py-16 text-center">
+        <section data-reveal className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-3 py-16 text-center sm:px-6">
           <div data-visual="service-orbit" className="relative isolate grid size-44 place-items-center">
             <Sparkles className="size-14 text-primary" aria-hidden="true" />
           </div>
-          <p className="mt-8 text-xs font-semibold tracking-[0.2em] text-primary uppercase">SWU Campus</p>
-          <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">服务暂未开放</h1>
+          <h1 className="mt-8 text-3xl font-semibold sm:text-4xl">服务暂未开放</h1>
           <p className="mt-4 max-w-md text-sm leading-7 text-muted-foreground sm:text-base">
             当前暂不提供二维码登录、住宿查询与临时签到，请稍后再访问。
           </p>

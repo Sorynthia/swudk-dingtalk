@@ -100,7 +100,7 @@ describe("客户端会话切换", () => {
     expect(maintenanceRoot.props["data-service-state"]).toBe("disabled");
   });
 
-  it("顶栏使用站点图标并显示扫码打卡品牌文字", () => {
+  it("顶栏与个人网站同宽并只显示中文品牌文字", () => {
     const html = renderToStaticMarkup(
       AppShell({
         serviceEnabled: false,
@@ -111,6 +111,13 @@ describe("客户端会话切换", () => {
     expect(html).toContain('src="/icon.svg"');
     expect(html).toContain("SWU钉钉扫码打卡");
     expect(html).not.toContain("西大寝签");
+    expect(html).not.toContain("SWU Campus");
+    expect(html).toMatch(
+      /<header[^>]*class="[^"]*sticky top-0 z-50 px-3 pt-3 sm:px-5 sm:pt-4[^"]*">/,
+    );
+    expect(html).toMatch(
+      /<header[\s\S]*?<div[^>]*class="[^"]*mx-auto[^"]*h-14[^"]*w-full[^"]*max-w-5xl[^"]*sm:h-16[^"]*">/,
+    );
   });
 
   it("重新登录后不复用首次服务端渲染的签到状态", async () => {
