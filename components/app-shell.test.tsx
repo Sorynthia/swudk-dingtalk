@@ -109,7 +109,8 @@ describe("客户端会话切换", () => {
     );
 
     expect(html).toContain('src="/icon.svg"');
-    expect(html).toContain("SWU钉钉扫码打卡");
+    expect(html).toContain("钉钉扫码打卡");
+    expect(html).not.toContain("SWU钉钉扫码打卡");
     expect(html).not.toContain("西大寝签");
     expect(html).not.toContain("SWU Campus");
     expect(html).toMatch(

@@ -28,4 +28,9 @@ describe("服务开关", () => {
     process.env.SERVICE_ENABLED = "false";
     expect(isServiceEnabled()).toBe(false);
   });
+
+  it("未配置 SERVICE_ENABLED 时默认开启", () => {
+    delete process.env.SERVICE_ENABLED;
+    expect(isServiceEnabled()).toBe(true);
+  });
 });

@@ -5,6 +5,8 @@ export type ApiRecord = Record<string, unknown>;
 export interface DormitoryProfile {
   address: string | null;
   checkInRadius: string | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export interface StudentProfile {

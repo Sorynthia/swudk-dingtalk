@@ -37,7 +37,31 @@ describe("校内资料和签到逻辑", () => {
     vi.restoreAllMocks();
   });
 
-  it("只向前端资料返回必要住宿字段", async () => {
+  it("查询接口遇到临时 HTTP 错误时只重试一次", async () => {
+    let leaveCalls = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("listSelfLeaveData")) {
+        leaveCalls += 1;
+        return leaveCalls === 1
+          ? jsonResponse({ message: "网关暂时不可用" }, 503)
+          : jsonResponse({ code: 200, data: { records: [] } });
+      }
+      if (url.includes("getTransitionByToday")) {
+        return jsonResponse({ code: 200, data: { records: [] } });
+      }
+      throw new Error(`未处理的测试 URL: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getCheckInStatus("test-token")).resolves.toEqual({
+      state: "not_required",
+      message: "今日暂无临时签到任务",
+    });
+    expect(leaveCalls).toBe(2);
+  });
+
+  it("向前端住宿档案返回地址、半径和登记经纬度", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
       if (url.includes("/api/auth/user")) {
@@ -50,9 +74,10 @@ describe("校内资料和签到逻辑", () => {
     expect(profile.dormitory).toEqual({
       address: "学生园区 1 舍",
       checkInRadius: "500 米",
+      latitude: 29.8,
+      longitude: 106.4,
     });
-    expect(JSON.stringify(profile)).not.toContain("latitude");
-    expect(JSON.stringify(profile)).not.toContain("longitude");
+    expect(profile.dormitory).toMatchObject({ latitude: 29.8, longitude: 106.4 });
   });
 
   it("将上游 401 转换为登录失效错误", async () => {
@@ -178,7 +203,16 @@ describe("校内资料和签到逻辑", () => {
           code: 200,
           data: {
             columnList: [
-              { latitude: 29.8, longitude: 106.4 },
+              {
+                latitude: 29.8,
+                longitude: 106.4,
+                netType: "4G",
+                operatorType: "中国移动",
+                provider: "gps",
+                isMobileEnabled: true,
+                cityAdCode: "500000",
+                districtAdCode: "500109",
+              },
               { value: "学生园区 1 舍" },
               { value: 500 },
             ],
@@ -201,6 +235,13 @@ describe("校内资料和签到逻辑", () => {
       formId: "form-1",
       xh: "20260001",
       qdbj: "500",
+      qddz: expect.objectContaining({
+        netType: "4G",
+        operatorType: "中国移动",
+        provider: "gps",
+        isMobileEnabled: true,
+        cityAdCode: "500000",
+      }),
     });
     expect(transitionCalls).toBe(2);
   });
@@ -267,6 +308,54 @@ describe("校内资料和签到逻辑", () => {
     }));
 
     await expect(submitCheckIn("test-token")).rejects.toThrow("保存失败");
+  });
+
+  it("上游嵌套 data.success=false 时仍识别为提交失败", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("listSelfLeaveData")) return jsonResponse({ code: 200, data: { records: [] } });
+      if (url.includes("getTransitionByToday")) {
+        return jsonResponse({ code: 200, data: { records: [{ id: "task-1", formId: "form-1", qdzt: "未签到", qdsj: ["21:00", "23:30"] }] } });
+      }
+      if (url.includes("/api/auth/user")) return jsonResponse({ code: 200, data: { subject: { username: "20260001" } } });
+      if (url.includes("getDormitory")) return jsonResponse(dormitoryPayload);
+      if (url.includes("form-instance/save")) {
+        return jsonResponse({ code: 200, data: { success: false }, message: "保存失败" });
+      }
+      throw new Error(`未处理的测试 URL: ${url}`);
+    }));
+
+    await expect(submitCheckIn("test-token")).rejects.toThrow("保存失败");
+  });
+
+  it("提交接口提示已签到时查询状态并按已签到处理", async () => {
+    let transitionCalls = 0;
+    let saveCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("listSelfLeaveData")) return jsonResponse({ code: 200, data: { records: [] } });
+      if (url.includes("getTransitionByToday")) {
+        transitionCalls += 1;
+        return jsonResponse({
+          code: 200,
+          data: { records: [{ id: "task-1", formId: "form-1", qdzt: transitionCalls > 1 ? "已签到" : "未签到", qdsj: ["21:00", "23:30"] }] },
+        });
+      }
+      if (url.includes("/api/auth/user")) return jsonResponse({ code: 200, data: { subject: { username: "20260001" } } });
+      if (url.includes("getDormitory")) return jsonResponse(dormitoryPayload);
+      if (url.includes("form-instance/save")) {
+        saveCalls += 1;
+        return jsonResponse({ code: 409, message: "今日已签到，请勿重复提交" });
+      }
+      throw new Error(`未处理的测试 URL: ${url}`);
+    }));
+
+    await expect(submitCheckIn("test-token")).resolves.toEqual({
+      state: "checked_in",
+      message: "今日临时签到已完成",
+    });
+    expect(saveCalls).toBe(1);
+    expect(transitionCalls).toBe(2);
   });
 
   it("学生信息业务失败时不会提交签到", async () => {

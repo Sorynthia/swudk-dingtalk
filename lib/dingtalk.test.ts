@@ -2,9 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   assertAllowedLoginUrl,
+  buildIdentitySelectionData,
+  chooseIdentityCode,
   extractState,
   extractTicket,
   pollDingTalkLogin,
+  startDingTalkLogin,
 } from "@/lib/dingtalk";
 import type { LoginSession } from "@/lib/session-store";
 
@@ -13,6 +16,73 @@ afterEach(() => {
 });
 
 describe("钉钉登录回调解析", () => {
+  it("多身份登录时优先选择研究生身份", () => {
+    const html = '<select id="identityDefault"></select><script>var defaultCodes = "benKeSheng:本科生;yanJiuSheng:研究生";</script>';
+    expect(chooseIdentityCode(html)).toBe("yanJiuSheng");
+  });
+
+  it("从身份选择表单保留上游隐藏字段", () => {
+    const html = '<select name="identityDefault"></select><script>var defaultCodes = "yanJiuSheng:研究生";</script><form name="Login"><input type="hidden" name="goto" value="encoded-goto"><input type="hidden" name="SunQueryParamsString" value="encoded-query"></form>';
+    expect(buildIdentitySelectionData(html, "yanJiuSheng", "fallback-goto")).toMatchObject({
+      IDToken1: "yanJiuSheng",
+      goto: "encoded-goto",
+      SunQueryParamsString: "encoded-query",
+    });
+  });
+
+  it("登录入口遇到多身份页时提交研究生身份并继续跳转", async () => {
+    const calls: Array<{ url: string; method: string; body: string; cookie: string | null }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const headers = new Headers(init?.headers);
+      calls.push({
+        url,
+        method: init?.method ?? "GET",
+        body: init?.body ? String(init.body) : "",
+        cookie: headers.get("cookie"),
+      });
+
+      if (url.includes("/cas/oauth/login/DINGTALK")) {
+        return new Response("", {
+          status: 302,
+          headers: {
+            location: "https://idm.swu.edu.cn/am/UI/Login?realm=/",
+          },
+        });
+      }
+      if (url.startsWith("https://idm.swu.edu.cn/am/UI/Login")) {
+        if (init?.method === "POST") {
+          return new Response("", {
+            status: 302,
+            headers: { location: "https://login.dingtalk.com/login/qrcode.htm?state=graduate-state" },
+          });
+        }
+        return new Response(
+          '<form name="Login" action="/am/UI/Login"><input type="hidden" name="goto" value="encoded-goto"><select id="identityDefault"></select><script>var defaultCodes = "benKeSheng:本科生;yanJiuSheng:研究生";</script></form>',
+          {
+            status: 200,
+            headers: { "set-cookie": "idm-session=idm-value; Domain=.idm.swu.edu.cn; Path=/; Secure" },
+          },
+        );
+      }
+      if (url.includes("/user/qrcode/generate")) {
+        return new Response(JSON.stringify({ success: true, result: "qr-code" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("", { status: 200 });
+    }));
+
+    const session = await startDingTalkLogin();
+    const identityPost = calls.find(
+      (call) => call.url.startsWith("https://idm.swu.edu.cn/am/UI/Login") && call.method === "POST",
+    );
+    expect(identityPost?.cookie).toBe("idm-session=idm-value");
+    expect(new URLSearchParams(identityPost?.body).get("IDToken1")).toBe("yanJiuSheng");
+    expect(session.goto).toContain("graduate-state");
+  });
+
   it("能够从双重编码链接中提取 state", () => {
     const target = "https://login.dingtalk.com/login/qrcode.htm?state=test%2Fstate";
     expect(extractState(encodeURIComponent(encodeURIComponent(target)))).toBe("test/state");

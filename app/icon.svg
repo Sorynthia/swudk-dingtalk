@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <title>SWU钉钉扫码打卡</title>
+  <title>钉钉扫码打卡</title>
   <rect x="2" y="2" width="60" height="60" rx="16" fill="#3b2b22" />
   <path
     d="M19 27v-6h6M39 21h6v6M45 37v6h-6M25 43h-6v-6"

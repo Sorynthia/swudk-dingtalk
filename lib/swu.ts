@@ -21,9 +21,14 @@ interface UserResponse extends DataResponse {
 interface DataResponse {
   data?: unknown;
   code?: string | number;
-  success?: boolean;
+  status?: string | number;
+  success?: boolean | string | number;
+  result?: boolean | string | number;
+  ok?: boolean | string | number;
   message?: string;
   msg?: string;
+  error?: string;
+  exceptionMsg?: string;
 }
 
 interface CheckInContext {
@@ -37,7 +42,13 @@ interface DormitoryColumn extends ApiRecord {
   longitude?: unknown;
 }
 
-const SUCCESS_CODES = new Set(["0", "200", "20000", "00000"]);
+const SUCCESS_CODES = new Set(["0", "200", "20000", "00000", "success", "ok", "true"]);
+const RETRYABLE_HTTP_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+function isRetryableNetworkError(error: unknown) {
+  return error instanceof TypeError
+    || (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError"));
+}
 
 export class SwuUnauthorizedError extends Error {
   constructor(message = "校内登录状态已失效") {
@@ -56,44 +67,80 @@ function asRecord(value: unknown): ApiRecord | null {
     : null;
 }
 
-async function fetchJson<T>(url: string, token: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...init,
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
-    headers: {
-      "fighter-auth-token": token,
-      ...init?.headers,
-    },
-  });
+async function fetchJson<T>(
+  url: string,
+  token: string,
+  init?: RequestInit,
+  options: { retry?: boolean } = {},
+): Promise<T> {
+  for (let attempt = 0; attempt < (options.retry ? 2 : 1); attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        ...init,
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+        headers: {
+          "fighter-auth-token": token,
+          ...init?.headers,
+        },
+      });
 
-  if (response.status === 401 || response.status === 403) {
-    throw new SwuUnauthorizedError();
-  }
-  if (!response.ok) {
-    throw new Error(`校内服务请求失败（HTTP ${response.status}）`);
-  }
+      if (response.status === 401 || response.status === 403) {
+        throw new SwuUnauthorizedError();
+      }
+      if (!response.ok) {
+        if (options.retry && attempt === 0 && RETRYABLE_HTTP_STATUS.has(response.status)) {
+          continue;
+        }
+        throw new Error(`校内服务请求失败（HTTP ${response.status}）`);
+      }
 
-  try {
-    return (await response.json()) as T;
-  } catch {
-    throw new Error("校内服务返回了无法解析的数据");
+      try {
+        return (await response.json()) as T;
+      } catch {
+        throw new Error("校内服务返回了无法解析的数据");
+      }
+    } catch (error) {
+      if (error instanceof SwuUnauthorizedError) throw error;
+      if (options.retry && attempt === 0 && isRetryableNetworkError(error)) continue;
+      throw error;
+    }
   }
+  throw new Error("校内服务请求失败");
+}
+
+function isFailedResult(value: unknown) {
+  return value === false
+    || (typeof value === "number" && value === 0)
+    || (typeof value === "string" && /^(false|0|fail|failed|error)$/i.test(value.trim()));
+}
+
+function readResponseMessage(payload: DataResponse) {
+  for (const key of ["message", "msg", "error", "exceptionMsg"] as const) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
 }
 
 function assertBusinessSuccess(payload: DataResponse, context: string) {
-  const message = payload.message || payload.msg;
-  const code = payload.code === undefined ? undefined : String(payload.code);
-  const hasSuccessSignal = payload.success === true || (code !== undefined && SUCCESS_CODES.has(code));
-  const failed =
-    payload.success === false ||
-    (code !== undefined && !SUCCESS_CODES.has(code)) ||
-    (!hasSuccessSignal && payload.data === undefined && Boolean(message));
-  if (failed && (code === "401" || code === "403" || /登录|认证|token/i.test(message ?? ""))) {
+  const message = readResponseMessage(payload);
+  const data = asRecord(payload.data);
+  const codeValue = payload.code ?? payload.status ?? data?.code ?? data?.status;
+  const code = codeValue === undefined ? undefined : String(codeValue).trim().toLowerCase();
+  const explicitResult = payload.success ?? payload.result ?? payload.ok
+    ?? data?.success ?? data?.result ?? data?.ok;
+  const failedCode = code !== undefined && !SUCCESS_CODES.has(code);
+  const failedResult = isFailedResult(explicitResult);
+  const hasSuccessSignal = explicitResult === true
+    || (typeof explicitResult === "string" && /^(success|ok|true)$/i.test(explicitResult.trim()))
+    || (code !== undefined && SUCCESS_CODES.has(code));
+  const failed = failedCode || failedResult || (!hasSuccessSignal && payload.data === undefined && Boolean(message));
+  if (failed && (code === "401" || code === "403" || /登录|认证|token/i.test(message))) {
     throw new SwuUnauthorizedError(message || undefined);
   }
   if (failed) {
-    throw new Error(message || `${context}失败（业务码 ${code ?? "未知"}）`);
+    throw new Error(message || `${context}失败（业务码 ${codeValue ?? "未知"}）`);
   }
 }
 
@@ -126,6 +173,10 @@ function normalizeCheckInWindow(value: unknown): [string, string] | undefined {
     value.length === 2 &&
     value.every((part) => typeof part === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(part))
   ) return [value[0] as string, value[1] as string];
+  if (typeof value === "string") {
+    const parts = value.match(/([01]\d|2[0-3]):[0-5]\d/g);
+    if (parts?.length === 2) return [parts[0], parts[1]];
+  }
   return undefined;
 }
 
@@ -155,7 +206,7 @@ async function getDormitory(token: string) {
     method: "POST",
     headers: { "Content-Type": "application/json;charset=UTF-8" },
     body: "{}",
-  });
+  }, { retry: true });
   assertBusinessSuccess(payload, "住宿信息查询");
   return asRecord(payload.data);
 }
@@ -165,7 +216,7 @@ async function hasActiveApprovedLeave(token: string, now: Date) {
     const url = new URL(LEAVE_URL);
     url.searchParams.set("pageNum", String(pageNum));
     url.searchParams.set("pageSize", String(LEAVE_PAGE_SIZE));
-    const payload = await fetchJson<DataResponse>(url.toString(), token);
+    const payload = await fetchJson<DataResponse>(url.toString(), token, undefined, { retry: true });
     assertBusinessSuccess(payload, "请假信息查询");
     const records = recordsFrom(payload);
     const active = records.some((leave) => {
@@ -190,19 +241,20 @@ async function getTodayCheckInContext(token: string): Promise<CheckInContext> {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
     body: new URLSearchParams({ pageNum: "1", pageSize: "1" }),
-  });
+  }, { retry: true });
   assertBusinessSuccess(transitionPayload, "签到状态查询");
   const task = recordsFrom(transitionPayload)[0];
   if (!task) {
     return { status: { state: "not_required", message: "今日暂无临时签到任务" } };
   }
-  if (task.qdzt === "已签到") {
+  const taskState = typeof task.qdzt === "string" ? task.qdzt.trim() : task.qdzt;
+  if (taskState === "已签到") {
     return { status: { state: "checked_in", message: "今日临时签到已完成" }, task };
   }
-  if (task.qdzt !== "未签到") {
-    const taskState = typeof task.qdzt === "string" && task.qdzt.trim() ? task.qdzt.trim() : "未知";
+  if (taskState !== "未签到") {
+    const displayState = typeof taskState === "string" && taskState ? taskState : "未知";
     return {
-      status: { state: "unavailable", message: `当前签到任务状态为“${taskState}”，不可提交` },
+      status: { state: "unavailable", message: `当前签到任务状态为“${displayState}”，不可提交` },
       task,
     };
   }
@@ -243,6 +295,16 @@ function requireStringOrNumber(value: unknown, message: string) {
   throw new Error(message);
 }
 
+function optionalStringOrNumber(value: unknown, fallback: string | number) {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return fallback;
+}
+
+function optionalBoolean(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
 function requireCoordinate(
   value: unknown,
   missingMessage: string,
@@ -263,9 +325,30 @@ function requireCoordinate(
   return coordinate;
 }
 
+function isAlreadyCheckedInError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /已签到|已经签到|重复签到|今日[^。\n]{0,12}签到|already\s*(checked|signed)|duplicate/i.test(message);
+}
+
+async function confirmCheckIn(token: string) {
+  const delays = [0, 300, 600, 1_000];
+  for (let attempt = 0; attempt < delays.length; attempt += 1) {
+    if (delays[attempt] > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+    }
+    try {
+      const confirmed = await getTodayCheckInContext(token);
+      if (confirmed.status.state === "checked_in") return true;
+    } catch (error) {
+      if (isSwuUnauthorizedError(error)) throw error;
+    }
+  }
+  return false;
+}
+
 export async function getStudentProfile(token: string): Promise<StudentProfile> {
   const [userPayload, dormitory] = await Promise.all([
-    fetchJson<UserResponse>(USER_URL, token),
+    fetchJson<UserResponse>(USER_URL, token, undefined, { retry: true }),
     getDormitory(token),
   ]);
 
@@ -280,17 +363,29 @@ export async function getStudentProfile(token: string): Promise<StudentProfile> 
     : [];
   const address = columns[1]?.value;
   const checkInRadius = columns[2]?.value;
+  const latitude = typeof columns[0]?.latitude === "number"
+    ? Number.isFinite(columns[0].latitude) ? columns[0].latitude : null
+    : typeof columns[0]?.latitude === "string" && columns[0].latitude.trim()
+      ? Number.isFinite(Number(columns[0].latitude)) ? Number(columns[0].latitude) : null
+      : null;
+  const longitude = typeof columns[0]?.longitude === "number"
+    ? Number.isFinite(columns[0].longitude) ? columns[0].longitude : null
+    : typeof columns[0]?.longitude === "string" && columns[0].longitude.trim()
+      ? Number.isFinite(Number(columns[0].longitude)) ? Number(columns[0].longitude) : null
+      : null;
 
   return {
     studentId,
     dormitory: dormitory
       ? {
-          address: typeof address === "string" && address.trim() ? address.trim() : null,
-          checkInRadius:
-            typeof checkInRadius === "string" || typeof checkInRadius === "number"
-              ? String(checkInRadius)
-              : null,
-        }
+        address: typeof address === "string" && address.trim() ? address.trim() : null,
+        checkInRadius:
+          typeof checkInRadius === "string" || typeof checkInRadius === "number"
+            ? String(checkInRadius)
+            : null,
+        latitude,
+        longitude,
+      }
       : null,
     updatedAt: new Date().toISOString(),
   };
@@ -309,7 +404,7 @@ export async function submitCheckIn(token: string): Promise<CheckInStatus> {
   const checkInWindow = normalizeCheckInWindow(context.task.qdsj);
   if (!checkInWindow) throw new Error("签到任务缺少有效的开放时间");
   const [userPayload, dormitory] = await Promise.all([
-    fetchJson<UserResponse>(USER_URL, token),
+    fetchJson<UserResponse>(USER_URL, token, undefined, { retry: true }),
     getDormitory(token),
   ]);
   assertBusinessSuccess(userPayload, "学生信息查询");
@@ -333,50 +428,52 @@ export async function submitCheckIn(token: string): Promise<CheckInStatus> {
   );
   const address = requireString(columns[1].value, "住宿信息缺少签到地址");
   const checkInRadius = requireStringOrNumber(columns[2].value, "住宿信息缺少签到半径");
+  const locationColumn = columns[0];
   const saveUrl = new URL(CHECK_IN_URL);
   saveUrl.searchParams.set("formId", formId);
   saveUrl.searchParams.set("isSubmitProcess", "false");
 
-  const savePayload = await fetchJson<DataResponse>(saveUrl.toString(), token, {
-    method: "POST",
-    headers: { "Content-Type": "application/json;charset=UTF-8" },
-    body: JSON.stringify({
-      id: taskId,
-      formId,
-      tsrq: formatChinaDate(),
-      xh: studentId,
-      qdsj: checkInWindow,
-      qsqddd: address,
-      qdbj: checkInRadius,
-      qddz: {
-        latitude,
-        longitude,
-        address,
-        netType: "wifi",
-        operatorType: "unknown",
-        imei: "imei",
-        time: Date.now(),
-        provider: "lbs",
-        isFromMock: false,
-        isGpsEnabled: true,
-        isWifiEnabled: true,
-        isMobileEnabled: false,
-        isOffset: true,
-        cityAdCode: "023",
-        districtAdCode: "500109",
-        isArea: true,
-        tip: "当前在签到范围内",
-      },
-    }),
-  });
-  assertBusinessSuccess(savePayload, "临时签到提交");
+  try {
+    const savePayload = await fetchJson<DataResponse>(saveUrl.toString(), token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json;charset=UTF-8" },
+      body: JSON.stringify({
+        id: taskId,
+        formId,
+        tsrq: formatChinaDate(),
+        xh: studentId,
+        qdsj: checkInWindow,
+        qsqddd: address,
+        qdbj: checkInRadius,
+        qddz: {
+          latitude,
+          longitude,
+          address,
+          netType: optionalStringOrNumber(locationColumn.netType, "wifi"),
+          operatorType: optionalStringOrNumber(locationColumn.operatorType, "unknown"),
+          imei: optionalStringOrNumber(locationColumn.imei, "imei"),
+          time: Date.now(),
+          provider: optionalStringOrNumber(locationColumn.provider, "lbs"),
+          isFromMock: optionalBoolean(locationColumn.isFromMock, false),
+          isGpsEnabled: optionalBoolean(locationColumn.isGpsEnabled, true),
+          isWifiEnabled: optionalBoolean(locationColumn.isWifiEnabled, true),
+          isMobileEnabled: optionalBoolean(locationColumn.isMobileEnabled, false),
+          isOffset: optionalBoolean(locationColumn.isOffset, true),
+          cityAdCode: optionalStringOrNumber(locationColumn.cityAdCode, "023"),
+          districtAdCode: optionalStringOrNumber(locationColumn.districtAdCode, "500109"),
+          isArea: optionalBoolean(locationColumn.isArea, true),
+          tip: optionalStringOrNumber(locationColumn.tip, "当前在签到范围内"),
+        },
+      }),
+    });
+    assertBusinessSuccess(savePayload, "临时签到提交");
+  } catch (error) {
+    if (!isAlreadyCheckedInError(error) || !(await confirmCheckIn(token))) throw error;
+    return { state: "checked_in", message: "今日临时签到已完成" };
+  }
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const confirmed = await getTodayCheckInContext(token);
-    if (confirmed.status.state === "checked_in") {
-      return { state: "checked_in", message: "临时签到已完成" };
-    }
-    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 300));
+  if (await confirmCheckIn(token)) {
+    return { state: "checked_in", message: "临时签到已完成" };
   }
 
   throw new Error("签到请求已提交，但未能确认签到状态，请刷新后重试");

@@ -29,13 +29,8 @@ function consumeBucket(key: string, limit: number, now: number) {
   return bucket.count <= limit;
 }
 
-function clientKey(request: Request, sessionId: string | undefined) {
-  const trustProxy = process.env.TRUST_PROXY?.trim().toLowerCase() === "true";
-  const forwardedAddress = trustProxy
-    ? request.headers.get("x-forwarded-for")?.split(",", 1)[0].trim()
-    : undefined;
-  const identifier = forwardedAddress || sessionId;
-  return identifier ? `client:${identifier}` : undefined;
+function clientKey(sessionId: string | undefined) {
+  return sessionId ? `client:${sessionId}` : undefined;
 }
 
 export interface RateLimitLease {
@@ -47,11 +42,12 @@ export function acquireQrGenerationLease(
   sessionId: string | undefined,
   now = Date.now(),
 ): RateLimitLease | undefined {
+  void request;
   for (const [key, bucket] of buckets) {
     if (now - bucket.startedAt >= RATE_WINDOW_MS) buckets.delete(key);
   }
 
-  const key = clientKey(request, sessionId);
+  const key = clientKey(sessionId);
   if (
     (key && !consumeBucket(key, MAX_REQUESTS_PER_KEY, now)) ||
     !consumeBucket("global", MAX_GLOBAL_REQUESTS_PER_WINDOW, now) ||

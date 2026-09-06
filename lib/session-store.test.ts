@@ -1,272 +1,72 @@
-import { createCipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { describe, expect, it } from "vitest";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  authenticateSession,
+  createLoginSession,
+  deleteLoginSession,
+  getLoginSession,
+  getSessionCookieOptions,
+  LOGIN_TTL_MS,
+} from "@/lib/session-store";
 
-const temporaryDirectories: string[] = [];
+const profile = {
+  studentId: "20260001",
+  dormitory: { address: "学生园区 1 舍", checkInRadius: "500 米", latitude: null, longitude: null },
+  updatedAt: new Date().toISOString(),
+};
 
-async function loadIsolatedStore() {
-  const root = join(tmpdir(), `swudk-session-${randomBytes(8).toString("hex")}`);
-  const dataDirectory = join(root, "data");
-  const sessionSecret = randomBytes(32).toString("base64");
-  mkdirSync(dataDirectory, { recursive: true });
-  temporaryDirectories.push(root);
-  process.env.SESSION_DATA_DIR = dataDirectory;
-  process.env.SESSION_SECRET = sessionSecret;
-  (globalThis as typeof globalThis & { swuLoginSessions?: unknown }).swuLoginSessions = undefined;
-  vi.resetModules();
-  const store = await import("@/lib/session-store");
-  return {
-    store,
-    root,
-    dataDirectory,
-    encryptionKey: createHash("sha256").update(sessionSecret).digest(),
-  };
+function newSession(expiresAt = Date.now() + LOGIN_TTL_MS) {
+  return createLoginSession({
+    expiresAt,
+    stage: "waiting",
+    message: "等待扫码",
+    qrImage: "data:image/png;base64,test",
+    qrCode: "temporary-code",
+    goto: "https://oapi.dingtalk.com/connect/oauth2/sns_authorize",
+    appId: "temporary-app",
+    cookies: [],
+  });
 }
 
-afterEach(() => {
-  delete process.env.SESSION_DATA_DIR;
-  delete process.env.SESSION_SECRET;
-  for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
+describe("进程内临时会话", () => {
+  it("认证后保留会话并清理二维码数据", () => {
+    const session = newSession();
+    authenticateSession(session, "test-secret-token", profile);
 
-describe("本机会话存储", () => {
-  it("加密保存并跨模块恢复当前会话", async () => {
-    const { store, dataDirectory } = await loadIsolatedStore();
-    const session = store.createLoginSession({
-      expiresAt: Date.now() + store.LOGIN_TTL_MS,
-      stage: "waiting",
-      message: "测试",
-      qrImage: "data:image/png;base64,test",
-      qrCode: "temporary-code",
-      goto: "https://oapi.dingtalk.com/connect/oauth2/sns_authorize",
-      appId: "temporary-app",
-      cookies: [{
-        name: "temporary-cookie",
-        value: "value",
-        domain: "login.dingtalk.com",
-        path: "/",
-        hostOnly: true,
-        secure: true,
-      }],
-    });
-    store.authenticateSession(session, "test-secret-token", {
-      studentId: "20260001",
-      dormitory: { address: "学生园区 1 舍", checkInRadius: "500 米" },
-      updatedAt: new Date().toISOString(),
-    });
-    expect(session).toMatchObject({ qrImage: "", qrCode: "", goto: "", appId: "" });
-    expect(session.cookies.length).toBe(0);
-
-    const sessionPath = join(dataDirectory, `${session.id}.session`);
-    expect(readFileSync(sessionPath, "utf8")).not.toContain("test-secret-token");
-
-    (globalThis as typeof globalThis & { swuLoginSessions?: unknown }).swuLoginSessions = undefined;
-    vi.resetModules();
-    const restoredStore = await import("@/lib/session-store");
-    const restored = restoredStore.getLoginSession(session.id);
-    expect(restored?.token).toBe("test-secret-token");
-    expect(restored?.profile?.dormitory).toEqual({
-      address: "学生园区 1 舍",
-      checkInRadius: "500 米",
-    });
-
-    restoredStore.deleteLoginSession(session.id);
-    expect(existsSync(sessionPath)).toBe(false);
-  });
-
-  it("主动清理过期和损坏的孤立会话文件", async () => {
-    const { store, dataDirectory } = await loadIsolatedStore();
-    const expiredSession = store.createLoginSession({
-      expiresAt: Date.now() + store.LOGIN_TTL_MS,
-      stage: "waiting",
-      message: "测试",
+    expect(getLoginSession(session.id)).toBe(session);
+    expect(session).toMatchObject({
+      stage: "authenticated",
+      token: "test-secret-token",
+      profile,
       qrImage: "",
       qrCode: "",
       goto: "",
       appId: "",
-      cookies: [],
     });
-    store.authenticateSession(expiredSession, "test-token", {
-      studentId: "20260001",
-      dormitory: null,
-      updatedAt: new Date().toISOString(),
-    });
-    const expiredPath = join(dataDirectory, `${expiredSession.id}.session`);
-    const damagedPath = join(dataDirectory, `${randomUUID()}.session`);
-    writeFileSync(damagedPath, "damaged", "utf8");
-
-    store.sweepPersistedSessionsForTests(Date.now() + 8 * 24 * 60 * 60 * 1000);
-
-    expect(existsSync(expiredPath)).toBe(false);
-    expect(existsSync(damagedPath)).toBe(false);
   });
 
-  it("待扫码会话超时后返回 expired 状态", async () => {
-    const { store } = await loadIsolatedStore();
-    const session = store.createLoginSession({
-      expiresAt: Date.now() - 1,
-      stage: "waiting",
-      message: "等待扫码",
-      qrImage: "data:image/png;base64,test",
-      qrCode: "code",
-      goto: "goto",
-      appId: "app",
-      cookies: [],
-    });
+  it("删除会话后不再可访问", () => {
+    const session = newSession();
+    deleteLoginSession(session.id);
+    expect(getLoginSession(session.id)).toBeUndefined();
+  });
 
-    expect(store.getLoginSession(session.id)).toMatchObject({
+  it("待扫码会话过期后返回 expired 状态", () => {
+    const session = newSession(Date.now() - 1);
+    expect(getLoginSession(session.id)).toMatchObject({
       stage: "expired",
       message: "二维码已过期",
     });
   });
 
-  it("拒绝并删除包含旧资料结构的会话", async () => {
-    const { store, dataDirectory, encryptionKey } = await loadIsolatedStore();
-    const id = randomUUID();
-    const iv = randomBytes(12);
-    const cipher = createCipheriv(
-      "aes-256-gcm",
-      encryptionKey,
-      iv,
-    );
-    const encrypted = Buffer.concat([
-      cipher.update(
-        JSON.stringify({
-          version: 2,
-          id,
-          createdAt: Date.now(),
-          expiresAt: Date.now() + 60_000,
-          token: "old-token",
-          profile: {
-            studentId: "20260001",
-            dormitory: { address: "学生园区 1 舍", checkInClass: "500 米" },
-            updatedAt: new Date().toISOString(),
-          },
-        }),
-        "utf8",
-      ),
-      cipher.final(),
-    ]);
-    const sealed = [
-      "v1",
-      iv.toString("base64url"),
-      cipher.getAuthTag().toString("base64url"),
-      encrypted.toString("base64url"),
-    ].join(".");
-    writeFileSync(join(dataDirectory, `${id}.session`), sealed, "utf8");
-
-    expect(store.getLoginSession(id)).toBeUndefined();
-    expect(existsSync(join(dataDirectory, `${id}.session`))).toBe(false);
+  it("已删除会话不能异步认证", () => {
+    const session = newSession();
+    deleteLoginSession(session.id);
+    expect(() => authenticateSession(session, "test-token", profile)).toThrow("登录会话已失效");
   });
 
-  it("缺少环境密钥时拒绝保存会话", async () => {
-    const { store } = await loadIsolatedStore();
-    delete process.env.SESSION_SECRET;
-    const session = store.createLoginSession({
-      expiresAt: Date.now() + store.LOGIN_TTL_MS,
-      stage: "waiting",
-      message: "测试",
-      qrImage: "",
-      qrCode: "",
-      goto: "",
-      appId: "",
-      cookies: [],
-    });
-
-    const originalExpiresAt = session.expiresAt;
-
-    expect(() => store.authenticateSession(session, "test-token", {
-      studentId: "20260001",
-      dormitory: null,
-      updatedAt: new Date().toISOString(),
-    })).toThrow("SESSION_SECRET 未配置或长度不足 32 个字符");
-    expect(session).toMatchObject({
-      stage: "waiting",
-      message: "测试",
-      expiresAt: originalExpiresAt,
-    });
-    expect(session.token).toBeUndefined();
-    expect(session.profile).toBeUndefined();
-  });
-
-  it("已过期的待扫码会话不能被异步登录流程认证", async () => {
-    const { store, dataDirectory } = await loadIsolatedStore();
-    const session = store.createLoginSession({
-      expiresAt: Date.now() - 1,
-      stage: "waiting",
-      message: "等待扫码",
-      qrImage: "",
-      qrCode: "code",
-      goto: "goto",
-      appId: "app",
-      cookies: [],
-    });
-
-    expect(() => store.authenticateSession(session, "test-token", {
-      studentId: "20260001",
-      dormitory: null,
-      updatedAt: new Date().toISOString(),
-    })).toThrow("登录会话已失效");
-    expect(session.stage).toBe("waiting");
-    expect(existsSync(join(dataDirectory, `${session.id}.session`))).toBe(false);
-  });
-
-  it("退出后异步请求不能重新持久化已删除的会话", async () => {
-    const { store, dataDirectory } = await loadIsolatedStore();
-    const session = store.createLoginSession({
-      expiresAt: Date.now() + store.LOGIN_TTL_MS,
-      stage: "waiting",
-      message: "测试",
-      qrImage: "",
-      qrCode: "",
-      goto: "",
-      appId: "",
-      cookies: [],
-    });
-    store.authenticateSession(session, "test-token", {
-      studentId: "20260001",
-      dormitory: null,
-      updatedAt: new Date().toISOString(),
-    });
-    const sessionPath = join(dataDirectory, `${session.id}.session`);
-
-    store.deleteLoginSession(session.id);
-    expect(existsSync(sessionPath)).toBe(false);
-
-    session.profile = {
-      studentId: "20260001",
-      dormitory: { address: "学生园区 2 舍", checkInRadius: "300 米" },
-      updatedAt: new Date().toISOString(),
-    };
-    expect(store.persistAuthenticatedSession(session)).toBe(false);
-    expect(existsSync(sessionPath)).toBe(false);
-  });
-
-  it("退出后未完成的登录流程不能恢复已删除的会话", async () => {
-    const { store, dataDirectory } = await loadIsolatedStore();
-    const session = store.createLoginSession({
-      expiresAt: Date.now() + store.LOGIN_TTL_MS,
-      stage: "waiting",
-      message: "等待扫码",
-      qrImage: "",
-      qrCode: "",
-      goto: "",
-      appId: "",
-      cookies: [],
-    });
-
-    store.deleteLoginSession(session.id);
-    expect(() => store.authenticateSession(session, "test-token", {
-      studentId: "20260001",
-      dormitory: null,
-      updatedAt: new Date().toISOString(),
-    })).toThrow("登录会话已失效");
-    expect(session.stage).toBe("waiting");
-    expect(existsSync(join(dataDirectory, `${session.id}.session`))).toBe(false);
+  it("Cookie 安全属性只根据当前请求协议决定", () => {
+    expect(getSessionCookieOptions(new Request("http://localhost/api/auth/qr")).secure).toBe(false);
+    expect(getSessionCookieOptions(new Request("https://example.com/api/auth/qr")).secure).toBe(true);
   });
 });

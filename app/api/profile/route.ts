@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 
 import {
   getLoginSession,
-  persistAuthenticatedSession,
   SESSION_COOKIE,
 } from "@/lib/session-store";
 import { invalidateSession, isSameOriginRequest } from "@/lib/session-http";
@@ -27,7 +26,6 @@ export async function POST(request: Request) {
 
   try {
     session.profile = await getStudentProfile(session.token);
-    persistAuthenticatedSession(session);
     return NextResponse.json({ profile: session.profile });
   } catch (error) {
     if (isSwuUnauthorizedError(error)) {

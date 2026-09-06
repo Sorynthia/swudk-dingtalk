@@ -7,6 +7,7 @@ import {
   House,
   LoaderCircle,
   LogOut,
+  MapPin,
   QrCode,
   RefreshCw,
   ScanLine,
@@ -50,11 +51,15 @@ function getDormitoryFields(dormitory: DormitoryProfile | null): DormitoryField[
 
   const fields: DormitoryField[] = [];
 
-  if (dormitory.address) {
-    fields.push({ label: "住宿地址", value: dormitory.address, icon: House });
-  }
   if (dormitory.checkInRadius) {
     fields.push({ label: "签到半径", value: dormitory.checkInRadius, icon: ScanLine });
+  }
+  if (typeof dormitory.latitude === "number" && typeof dormitory.longitude === "number") {
+    fields.push({
+      label: "登记坐标",
+      value: `${dormitory.latitude.toFixed(6)}, ${dormitory.longitude.toFixed(6)}`,
+      icon: MapPin,
+    });
   }
   return fields.length > 0 ? fields : [{ label: "住宿信息", value: formatDormitory(dormitory), icon: House }];
 }
@@ -128,7 +133,7 @@ function Brand() {
   return (
     <div className="flex items-center gap-2 px-2 py-1.5 text-sm font-semibold tracking-[0.04em]">
       <Image src="/icon.svg" alt="" width={28} height={28} aria-hidden />
-      <span>SWU钉钉扫码打卡</span>
+      <span>钉钉扫码打卡</span>
     </div>
   );
 }
@@ -141,7 +146,7 @@ interface SiteHeaderProps {
 function SiteHeader({ status, actions }: SiteHeaderProps) {
   return (
     <header className="sticky top-0 z-50 px-3 pt-3 sm:px-5 sm:pt-4">
-      <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-3 rounded-full border border-white/60 bg-background/80 px-2.5 shadow-[var(--shadow-neumorphic)] backdrop-blur-xl sm:h-16 sm:px-3">
+      <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-3 rounded-xl border bg-background px-3 sm:h-16 sm:px-4">
         <Brand />
         <div className="flex shrink-0 items-center gap-1.5">
           <span className="sr-only">{status}</span>
@@ -198,14 +203,14 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
 
         <section className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-3 py-12 sm:px-6 sm:py-16">
           <div data-reveal className="mb-8 text-center">
-            <h1 className="text-balance text-3xl font-semibold sm:text-4xl">登录 SWU钉钉扫码打卡</h1>
+            <h1 className="text-balance text-3xl font-semibold sm:text-4xl">登录钉钉扫码打卡</h1>
             <p className="mt-4 text-sm leading-7 text-muted-foreground sm:text-base">
               扫描二维码，并在钉钉中确认登录
             </p>
           </div>
 
-          <div data-visual="qr-orbit" data-reveal className="isolate mx-auto size-[min(18rem,calc(100vw-4rem))] sm:size-[20rem]">
-            <div className="relative z-10 grid size-full place-items-center rounded-2xl border border-white/70 bg-white p-3 shadow-[var(--shadow-panel)] sm:p-4">
+          <div data-reveal className="isolate mx-auto size-[min(18rem,calc(100vw-4rem))] sm:size-[20rem]">
+            <div className="relative z-10 grid size-full place-items-center rounded-xl border bg-card p-3 sm:p-4">
               {hasActiveQr && qrImage ? (
                 <Image
                   src={qrImage}
@@ -226,7 +231,7 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
                   <ScanLine className="mb-4 size-10 text-muted-foreground" aria-hidden="true" />
                   <p className="font-medium">{stage === "expired" ? "二维码已过期" : "暂时无法登录"}</p>
                   <p className="mt-2 text-sm leading-5 text-muted-foreground">{message}</p>
-                  <Button variant="neumorphic" size="lg" className="mt-5" onClick={onRetry}>
+                  <Button size="lg" className="mt-5" onClick={onRetry}>
                     <RefreshCw className="size-4" />
                     重新生成
                   </Button>
@@ -238,7 +243,7 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
                   <p className="mt-2 text-sm leading-5 text-muted-foreground">
                     二维码只在你准备扫码时创建
                   </p>
-                  <Button variant="neumorphic" size="lg" className="mt-5" onClick={onRetry}>
+                  <Button size="lg" className="mt-5" onClick={onRetry}>
                     <QrCode className="size-4" />
                     生成登录二维码
                   </Button>
@@ -409,7 +414,7 @@ function Dashboard({
           actions={
             <>
             <Button
-              variant="neumorphic"
+              variant="outline"
               size="icon"
               onClick={refreshProfile}
               disabled={refreshing}
@@ -418,7 +423,7 @@ function Dashboard({
             >
               <RefreshCw className={refreshing ? "animate-spin" : ""} />
             </Button>
-            <Button variant="neumorphic" size="icon" onClick={handleLogout} disabled={loggingOut} aria-label="退出登录" title="退出登录">
+            <Button variant="outline" size="icon" onClick={handleLogout} disabled={loggingOut} aria-label="退出登录" title="退出登录">
               {loggingOut ? <LoaderCircle className="animate-spin" /> : <LogOut />}
             </Button>
             </>
@@ -454,7 +459,7 @@ function Dashboard({
         )}
 
         <section className="mt-7 grid gap-5 sm:mt-8 lg:grid-cols-[1.08fr_0.92fr]" aria-label="临时签到和住宿详情">
-          <div className="rounded-2xl border border-white/70 bg-card p-5 shadow-[var(--shadow-neumorphic)] sm:p-8">
+          <div className="rounded-xl border bg-card p-5 sm:p-8">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-medium text-primary">今日状态</p>
@@ -505,7 +510,7 @@ function Dashboard({
             )}
 
             <Button
-              variant="neumorphic"
+              variant="default"
               size="lg"
               className="mt-8 w-full sm:w-auto"
               onClick={submitTemporaryCheckIn}
@@ -516,7 +521,7 @@ function Dashboard({
             </Button>
           </div>
 
-          <div className="rounded-2xl border border-white/70 bg-card p-5 shadow-[var(--shadow-neumorphic)] sm:p-8">
+          <div className="rounded-xl border bg-card p-5 sm:p-8">
             <p className="text-xs font-medium text-muted-foreground">住宿档案</p>
             <h2 className="mt-2 text-xl font-semibold">{dormitory}</h2>
             <div className="mt-6 divide-y">
@@ -535,7 +540,7 @@ function Dashboard({
 
         <Separator className="mt-8 sm:mt-12" />
         <footer className="flex flex-col gap-2 py-6 text-xs leading-5 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <span>SWU钉钉扫码打卡 · 非学校官方应用</span>
+          <span>钉钉扫码打卡 · 非学校官方应用</span>
         </footer>
       </main>
       </div>
@@ -549,7 +554,7 @@ function MaintenanceScreen() {
       <div className="flex min-h-dvh flex-col">
         <SiteHeader status="服务关闭" />
         <section data-reveal className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-3 py-16 text-center sm:px-6">
-          <div data-visual="service-orbit" className="relative isolate grid size-44 place-items-center">
+          <div className="relative isolate grid size-44 place-items-center rounded-full border bg-muted">
             <Sparkles className="size-14 text-primary" aria-hidden="true" />
           </div>
           <h1 className="mt-8 text-3xl font-semibold sm:text-4xl">服务暂未开放</h1>

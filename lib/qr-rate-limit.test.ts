@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { acquireQrGenerationLease, resetQrRateLimitForTests } from "@/lib/qr-rate-limit";
 
 afterEach(() => {
-  delete process.env.TRUST_PROXY;
   resetQrRateLimitForTests();
 });
 

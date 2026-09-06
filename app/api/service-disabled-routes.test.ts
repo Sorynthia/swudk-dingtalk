@@ -26,7 +26,6 @@ vi.mock("@/lib/session-store", () => ({
   deleteLoginSession: mocks.deleteLoginSession,
   getLoginSession: mocks.getLoginSession,
   getSessionCookieOptions: vi.fn(() => ({})),
-  persistAuthenticatedSession: vi.fn(),
 }));
 vi.mock("@/lib/session-http", () => ({
   invalidateSession: vi.fn(),

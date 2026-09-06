@@ -19,12 +19,15 @@ const QR_PAGE_URL = "https://login.dingtalk.com/login/qrcode.htm";
 const QR_GENERATE_URL = "https://login.dingtalk.com/user/qrcode/generate";
 const QR_POLL_URL = "https://login.dingtalk.com/login/login_with_qr";
 const EXCHANGE_TOKEN_URL = "https://of.swu.edu.cn/gateway/fighter-middle/api/integrate/uaap/cas/exchange-token";
+const IDM_LOGIN_POST_URL = "https://idm.swu.edu.cn/am/UI/Login";
 const SERVICE_URL = `https://of.swu.edu.cn/gateway/fighter-middle/api/integrate/uaap/cas/resolve-cas-return?next=${encodeURIComponent(NEXT_URL)}`;
 const LOGIN_URL = `https://of.swu.edu.cn/cas/oauth/login/DINGTALK?service=${encodeURIComponent(SERVICE_URL)}`;
 const ALLOWED_LOGIN_ORIGINS = new Set([
   "https://login.dingtalk.com",
   "https://oapi.dingtalk.com",
   "https://of.swu.edu.cn",
+  "https://idm.swu.edu.cn",
+  "https://uaaap.swu.edu.cn",
 ]);
 const MAX_CONSECUTIVE_POLL_FAILURES = 3;
 const ALLOWED_COOKIE_DOMAINS = new Set([
@@ -32,6 +35,8 @@ const ALLOWED_COOKIE_DOMAINS = new Set([
   "oapi.dingtalk.com",
   "dingtalk.com",
   "of.swu.edu.cn",
+  "idm.swu.edu.cn",
+  "uaaap.swu.edu.cn",
   "swu.edu.cn",
 ]);
 
@@ -40,6 +45,8 @@ const DEFAULT_HEADERS = {
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
   Referer: "https://login.dingtalk.com/",
 };
+
+const IDENTITY_CODES_RE = /(?:var|let|const)\s+defaultCodes\s*=\s*['"]([^'"]*)['"]/i;
 
 interface DingTalkPayload {
   success?: boolean;
@@ -72,6 +79,80 @@ function defaultCookiePath(pathname: string) {
   return lastSlash <= 0 ? "/" : pathname.slice(0, lastSlash);
 }
 
+/** @internal 仅导出以覆盖 SWU 多身份登录兼容测试。 */
+export function chooseIdentityCode(html: string) {
+  if (!/(?:name|id)\s*=\s*['"]identityDefault['"]/i.test(html)) return undefined;
+  const match = IDENTITY_CODES_RE.exec(html);
+  if (!match) return undefined;
+
+  const identities = match[1]
+    .split(";")
+    .map((item) => {
+      const [code, ...labelParts] = item.split(":");
+      return { code: code?.trim() ?? "", label: labelParts.join(":").trim() };
+    })
+    .filter((item) => item.code);
+  if (identities.length === 0) return undefined;
+
+  return identities.find(({ code, label }) =>
+    /(yanjiusheng|研究生|硕士|博士)/i.test(`${code} ${label}`),
+  )?.code ?? identities[0].code;
+}
+
+function readHtmlAttribute(tag: string, attribute: string) {
+  const match = new RegExp(`\\b${attribute}\\s*=\\s*(["'])(.*?)\\1`, "i").exec(tag);
+  return match?.[2] ?? "";
+}
+
+/** @internal 仅导出以覆盖 SWU 多身份表单字段测试。 */
+export function buildIdentitySelectionData(html: string, identityCode: string, fallbackGoto: string) {
+  const data: Record<string, string> = {
+    IDToken1: identityCode,
+    IDToken2: "",
+    IDToken3: "",
+    goto: fallbackGoto,
+    gotoOnFail: "",
+    SunQueryParamsString: "",
+    encoded: "true",
+    gx_charset: "UTF-8",
+  };
+  const formMatch = /<form\b[^>]*\b(?:name|id)\s*=\s*["']Login["'][^>]*>([\s\S]*?)<\/form>/i.exec(html);
+  if (!formMatch) return data;
+
+  for (const input of formMatch[1].match(/<input\b[^>]*>/gi) ?? []) {
+    const name = readHtmlAttribute(input, "name");
+    if (!name || name in { IDToken1: true, IDToken2: true, IDToken3: true }) continue;
+    data[name] = readHtmlAttribute(input, "value");
+  }
+  return data;
+}
+
+function readIdentityFormAction(html: string) {
+  const formMatch = /<form\b[^>]*\b(?:name|id)\s*=\s*["']Login["'][^>]*>/i.exec(html);
+  return formMatch ? readHtmlAttribute(formMatch[0], "action") : "";
+}
+
+async function submitIdentitySelectionIfNeeded(
+  session: Pick<LoginSession, "cookies"> & Partial<Pick<LoginSession, "goto">>,
+  response: Response,
+) {
+  if (response.headers.get("location")?.includes("ticket=") || response.url.includes("ticket=")) {
+    return response;
+  }
+  const html = await response.clone().text();
+  const identityCode = chooseIdentityCode(html);
+  if (!identityCode) return response;
+
+  const data = buildIdentitySelectionData(html, identityCode, session.goto ?? "");
+  const action = readIdentityFormAction(html) || IDM_LOGIN_POST_URL;
+  const actionUrl = new URL(action, response.url || IDM_LOGIN_POST_URL).toString();
+  return requestWithCookies(session, actionUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: new URLSearchParams(data),
+  });
+}
+
 function domainMatches(hostname: string, domain: string, hostOnly: boolean) {
   return hostOnly ? hostname === domain : hostname === domain || hostname.endsWith(`.${domain}`);
 }
@@ -89,8 +170,13 @@ function absorbCookies(
   response: Response,
 ) {
   const headers = response.headers as Headers & { getSetCookie?: () => string[] };
-  const setCookies = headers.getSetCookie?.call(response.headers)
-    ?? (response.headers.get("set-cookie") ? [response.headers.get("set-cookie") as string] : []);
+  const nativeSetCookies = headers.getSetCookie?.call(response.headers) ?? [];
+  const fallbackSetCookie = response.headers.get("set-cookie");
+  const setCookies = nativeSetCookies.length > 0
+    ? nativeSetCookies
+    : fallbackSetCookie
+      ? [fallbackSetCookie]
+      : [];
   if (setCookies.length === 0) return;
 
   const request = new URL(requestUrl);
@@ -186,6 +272,7 @@ async function followRedirects(
   maxRedirects = 10,
 ) {
   let currentUrl = initialUrl;
+  let identitySelectionSubmitted = false;
 
   for (let index = 0; index <= maxRedirects; index += 1) {
     const response = await requestWithCookies(session, currentUrl);
@@ -193,6 +280,22 @@ async function followRedirects(
     if (!location || response.status < 300 || response.status >= 400) {
       if (!response.ok) {
         throw new Error(`登录服务请求失败（HTTP ${response.status}）`);
+      }
+
+      if (!identitySelectionSubmitted) {
+        const identityResponse = await submitIdentitySelectionIfNeeded(session, response);
+        if (identityResponse !== response) {
+          identitySelectionSubmitted = true;
+          const identityLocation = identityResponse.headers.get("location");
+          if (identityLocation) {
+            currentUrl = new URL(identityLocation, identityResponse.url || currentUrl).toString();
+            continue;
+          }
+          if (!identityResponse.ok) {
+            throw new Error(`登录服务请求失败（HTTP ${identityResponse.status}）`);
+          }
+          return { response: identityResponse, url: identityResponse.url || currentUrl };
+        }
       }
       return { response, url: currentUrl };
     }
