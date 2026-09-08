@@ -15,6 +15,16 @@ export function isSameOriginRequest(request: Request) {
   try {
     const requestOrigin = new URL(request.url).origin;
     const headerOrigin = new URL(origin).origin;
+    // 临时日志：调试部署环境的 origin 匹配问题
+    if (headerOrigin !== requestOrigin) {
+      console.error("[Origin Mismatch]", {
+        requestUrl: request.url,
+        requestOrigin,
+        headerOrigin,
+        originHeader: request.headers.get("origin"),
+        refererHeader: request.headers.get("referer"),
+      });
+    }
     return headerOrigin === requestOrigin;
   } catch {
     return false;
