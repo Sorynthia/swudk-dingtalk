@@ -12,7 +12,7 @@
 
 ## 技术栈
 
-- **框架**: Next.js 15 (App Router + API Routes)
+- **框架**: Next.js 16 (App Router + API Routes)
 - **UI**: shadcn/ui + Tailwind CSS
 - **状态管理**: React Hooks
 - **构建工具**: Turbopack
