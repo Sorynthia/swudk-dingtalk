@@ -1,6 +1,6 @@
 # 钉钉扫码打卡
 
-面向西南大学校园场景的钉钉扫码打卡工具，基于 Next.js 与 shadcn/ui 实现扫码登录、住宿信息查询及临时打卡。校内认证流程运行在 Next.js 服务端，浏览器只接收二维码、登录状态和脱敏后的学生信息。
+面向西南大学校园场景的钉钉扫码打卡工具。基于 Next.js App Router 实现前后端一体化，所有认证和打卡逻辑在 Next.js 服务端处理，浏览器只接收二维码、登录状态和脱敏后的学生信息。
 
 > 本项目不是学校官方系统。打卡结果应以目标校园系统的实际记录为准。
 
@@ -12,7 +12,7 @@
 
 ## 技术栈
 
-- **框架**: Next.js 15 (App Router)
+- **框架**: Next.js 15 (App Router + API Routes)
 - **UI**: shadcn/ui + Tailwind CSS
 - **状态管理**: React Hooks
 - **构建工具**: Turbopack
@@ -26,16 +26,7 @@
 pnpm install
 ```
 
-### 2. 配置环境变量
-
-创建 `.env.local` 文件：
-
-```bash
-# 后端 API 地址（可选，默认使用相对路径）
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-### 3. 启动开发服务器
+### 2. 启动开发服务器
 
 ```bash
 pnpm dev
@@ -43,7 +34,7 @@ pnpm dev
 
 访问 http://localhost:3000
 
-### 4. 生产构建
+### 3. 生产构建
 
 ```bash
 pnpm build
@@ -54,11 +45,14 @@ pnpm start
 
 ```
 .
-├── app/                    # Next.js App Router
+├── app/
 │   ├── layout.tsx         # 根布局
 │   ├── page.tsx           # 首页
-│   └── api/               # API 路由
-├── components/            # React 组件
+│   └── api/               # Next.js API Routes（服务端）
+│       ├── auth/          # 认证相关接口
+│       ├── check-in/      # 打卡接口
+│       └── profile/       # 用户信息接口
+├── components/
 │   └── ui/               # shadcn/ui 组件
 ├── lib/                  # 工具函数
 └── public/               # 静态资源
@@ -66,7 +60,7 @@ pnpm start
 
 ## 部署
 
-支持 Vercel、Netlify 等平台一键部署。
+支持 Vercel、Netlify 等 Node.js 平台。
 
 ### Vercel 部署
 
@@ -92,7 +86,7 @@ CMD ["pnpm", "start"]
 - ⚠️ 本项目仅用于技术研究和学习
 - ⚠️ 请遵守学校相关规定，不要用于违规用途
 - ⚠️ 打卡结果应以官方系统为准
-- ⚠️ 生产环境请配置正确的 API 地址和安全策略
+- ⚠️ 生产环境需要配置正确的安全策略
 
 ## 相关项目
 
