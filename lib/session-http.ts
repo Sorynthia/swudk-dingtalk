@@ -9,10 +9,13 @@ import {
 } from "@/lib/session-store";
 
 export function isSameOriginRequest(request: Request) {
-  const origin = request.headers.get("origin");
+  const origin = request.headers.get("origin") || request.headers.get("referer");
   if (!origin) return false;
+  
   try {
-    return origin === new URL(request.url).origin;
+    const requestOrigin = new URL(request.url).origin;
+    const headerOrigin = new URL(origin).origin;
+    return headerOrigin === requestOrigin;
   } catch {
     return false;
   }
