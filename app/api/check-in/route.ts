@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { getLoginSession, SESSION_COOKIE } from "@/lib/session-store";
-import { invalidateSession, isSameOriginRequest } from "@/lib/session-http";
+import { invalidateSession } from "@/lib/session-http";
 import {
   getCheckInStatus,
   isSwuUnauthorizedError,
@@ -39,9 +39,6 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (!isServiceEnabled()) return serviceUnavailableResponse();
-  if (!isSameOriginRequest(request)) {
-    return NextResponse.json({ message: "请求来源无效" }, { status: 403 });
-  }
   const session = await getAuthenticatedSession();
   if (!session?.token) return NextResponse.json({ message: "请重新登录" }, { status: 401 });
 

@@ -9,7 +9,6 @@ import {
   SESSION_COOKIE,
 } from "@/lib/session-store";
 import { acquireQrGenerationLease } from "@/lib/qr-rate-limit";
-import { isSameOriginRequest } from "@/lib/session-http";
 import { serviceUnavailableResponse } from "@/lib/service-http";
 import { isServiceEnabled } from "@/lib/service-status";
 
@@ -18,9 +17,6 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   if (!isServiceEnabled()) return serviceUnavailableResponse();
-  if (!isSameOriginRequest(request)) {
-    return NextResponse.json({ stage: "error", message: "请求来源无效" }, { status: 403 });
-  }
   try {
     const cookieStore = await cookies();
     const previousSessionId = cookieStore.get(SESSION_COOKIE)?.value;

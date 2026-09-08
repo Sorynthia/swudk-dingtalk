@@ -7,7 +7,6 @@ import {
   getLoginSession,
   SESSION_COOKIE,
 } from "@/lib/session-store";
-import { isSameOriginRequest } from "@/lib/session-http";
 import { serviceUnavailableResponse } from "@/lib/service-http";
 import { isServiceEnabled } from "@/lib/service-status";
 
@@ -30,9 +29,6 @@ export async function GET() {
 }
 
 export async function DELETE(request: Request) {
-  if (!isSameOriginRequest(request)) {
-    return NextResponse.json({ message: "请求来源无效" }, { status: 403 });
-  }
   const cookieStore = await cookies();
   deleteLoginSession(cookieStore.get(SESSION_COOKIE)?.value);
   cookieStore.set(SESSION_COOKIE, "", { ...getSessionCookieOptions(request), maxAge: 0 });
