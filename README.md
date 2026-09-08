@@ -8,79 +8,114 @@
 
 - 按需生成钉钉登录二维码并轮询授权状态
 - 查询学号、住宿地址、打卡半径和当前打卡状态
-- 仅在用户主动确认后提交临时打卡
-- 使用加密服务端会话保存必要的登录状态
-- 提供服务开关、请求来源校验和基础安全响应头
+- 提交临时打卡请求
 
 ## 技术栈
 
-- Next.js 16（App Router、Route Handler）
-- React 19、TypeScript
-- Tailwind CSS 4
-- shadcn/ui、Lucide
-- pnpm 11
+- **框架**: Next.js 15 (App Router)
+- **UI**: shadcn/ui + Tailwind CSS
+- **状态管理**: React Hooks
+- **构建工具**: Turbopack
+- **包管理**: pnpm
 
-## 环境要求
+## 快速开始
 
-- Node.js 20.9+
-- pnpm 11.18.0
-
-## 本地开发
+### 1. 安装依赖
 
 ```bash
 pnpm install
+```
+
+### 2. 配置环境变量
+
+创建 `.env.local` 文件：
+
+```bash
+# 后端 API 地址（可选，默认使用相对路径）
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+### 3. 启动开发服务器
+
+```bash
 pnpm dev
 ```
 
-不配置环境变量也可以直接运行，服务默认开启，Next.js 默认监听 `3000` 端口。
+访问 http://localhost:3000
 
-```env
-SERVICE_ENABLED=true
-PORT=3000
-```
-
-如需覆盖默认值，可临时设置 `SERVICE_ENABLED` 或 `PORT`。`SERVICE_ENABLED` 设为 `false` 时首页显示维护状态，业务 API 返回 HTTP `503`。会话仅存在于当前进程，服务重启后需要重新扫码登录。
-
-## 目录结构
-
-```text
-.
-├── app/              # App Router 页面、布局与 Route Handler
-├── components/       # 页面组件与基础 UI
-├── lib/              # 钉钉、校内接口、会话与通用逻辑
-├── test/             # 测试环境替代模块
-├── next.config.ts    # Next.js 配置与安全响应头
-├── package.json      # 脚本和依赖
-└── vitest.config.ts  # Vitest 配置
-```
-
-## 质量检查
+### 4. 生产构建
 
 ```bash
-pnpm lint
-pnpm typecheck
-pnpm test
 pnpm build
+pnpm start
 ```
 
-## 实现说明
+## 项目结构
 
-- `lib/dingtalk.ts` 负责二维码生成、状态轮询、授权回调和校内 token 交换。
-- `lib/swu.ts` 负责查询学号、住宿信息、请假与临时签到状态，并提交用户主动触发的签到。
-- `lib/session-store.ts` 使用不可读的 `HttpOnly` Cookie 关联服务端会话；token 和必要学生资料使用 AES-256-GCM 加密保存在本机 `.data` 目录。恢复后的实际有效期由校内登录状态决定。
-- `app/api` 提供二维码、轮询、会话、信息刷新与临时签到接口。
+```
+.
+├── app/                    # Next.js App Router
+│   ├── layout.tsx         # 根布局
+│   ├── page.tsx           # 首页
+│   └── api/               # API 路由
+├── components/            # React 组件
+│   └── ui/               # shadcn/ui 组件
+├── lib/                  # 工具函数
+└── public/               # 静态资源
+```
 
-临时签到只会在用户点击“执行临时签到”后提交。实现依据当前接口约定，使用 `getDormitory` 返回的 `data.columnList`：第 1 项提供登记经纬度，第 2 项提供住宿地址，第 3 项提供签到半径。若校内接口字段顺序发生变化，需要同步更新 `lib/swu.ts` 中的字段读取逻辑。
+## 部署
 
-未登录时不会自动生成二维码。页面只检查本机会话，用户点击“生成登录二维码”后才会请求钉钉登录服务。同一会话会复用仍有效的二维码；移动端切到钉钉或标签页进入后台后会暂停新轮询，返回页面、恢复网络或从浏览器缓存恢复时立即查询登录状态。短暂的网络和上游失败不会丢失当前二维码，扫码流程结束后立即清理二维码、临时 Cookie 和跳转参数。
+支持 Vercel、Netlify 等平台一键部署。
 
-会话仅保存在当前进程内，token 和必要学生资料不会写入磁盘；服务重启后需要重新扫码登录。所有使用 Cookie 鉴权的写接口都会校验请求 `Origin`。
+### Vercel 部署
 
-前端只接收学号、住宿地址和签到半径；登记坐标等签到内部字段仅在服务端读取。签到保存后会再次查询状态，只有确认 `qdzt` 为“已签到”才向页面报告成功。
+```bash
+pnpm vercel
+```
 
-## 生产部署
+### Docker 部署
 
-1. 执行 `pnpm build` 后使用 `pnpm start` 启动服务。
-2. 默认使用 `3000` 端口，需要时通过 `PORT` 覆盖。
+```dockerfile
+FROM node:20-alpine
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN corepack enable pnpm && pnpm install --frozen-lockfile
+COPY . .
+RUN pnpm build
+EXPOSE 3000
+CMD ["pnpm", "start"]
+```
 
-服务只保留进程内临时会话，适合单次使用或单实例临时部署。
+## 注意事项
+
+- ⚠️ 本项目仅用于技术研究和学习
+- ⚠️ 请遵守学校相关规定，不要用于违规用途
+- ⚠️ 打卡结果应以官方系统为准
+- ⚠️ 生产环境请配置正确的 API 地址和安全策略
+
+## 相关项目
+
+- **[swu-checkin](https://github.com/Sorynthia/swu-checkin)** - 钉钉查寝自动打卡脚本
+- **[swu-login](https://github.com/Sorynthia/swu-login)** - 西南大学统一身份认证独立登录模块
+
+如需完整的后端服务系统（API、用户管理、定时任务等），请参考 swudk 私有仓库。
+
+## 贡献指南
+
+欢迎提交 Issue 和 Pull Request！请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解详细信息。
+
+## 引用与归属
+
+如果你在项目中使用或参考了本代码，建议按以下方式标注：
+
+```
+基于 Sorynthia/swudk-dingtalk 开发
+GitHub: https://github.com/Sorynthia/swudk-dingtalk
+```
+
+本项目采用 MIT 许可证，欢迎使用和修改，但请保留原作者信息。
+
+## 许可证
+
+MIT License
