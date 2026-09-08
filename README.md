@@ -99,8 +99,6 @@ CMD ["pnpm", "start"]
 - **[swu-checkin](https://github.com/Sorynthia/swu-checkin)** - 钉钉查寝自动打卡脚本
 - **[swu-login](https://github.com/Sorynthia/swu-login)** - 西南大学统一身份认证独立登录模块
 
-如需完整的后端服务系统（API、用户管理、定时任务等），请参考 swudk 私有仓库。
-
 ## 贡献指南
 
 欢迎提交 Issue 和 Pull Request！请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解详细信息。
