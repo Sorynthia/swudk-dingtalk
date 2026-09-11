@@ -216,6 +216,7 @@ interface LoginScreenProps {
 }
 
 function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScreenProps) {
+  const [wrongScan, setWrongScan] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -225,8 +226,7 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
     const wrongScanFlag = sessionStorage.getItem("wrongScan");
     if (wrongScanFlag) {
       sessionStorage.removeItem("wrongScan");
-      // 触发错误状态由父组件处理
-      window.dispatchEvent(new CustomEvent("wrongScanDetected"));
+      setWrongScan(true);
     }
     
     const handleBeforeUnload = () => {
@@ -807,6 +807,9 @@ function EnabledAppShell({
 export default function AppShell({ serviceEnabled, ...props }: AppShellProps) {
   return serviceEnabled ? <EnabledAppShell {...props} /> : <MaintenanceScreen />;
 }
+
+
+
 
 
 
