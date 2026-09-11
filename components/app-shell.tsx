@@ -259,7 +259,18 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
           <Smartphone className="size-4" aria-hidden="true" />
           打开钉钉扫描二维码登录
         </p>
-      </div>
+      <Alert className="mt-4 max-w-md">
+          <AlertTitle className="flex items-center gap-2">
+            <ShieldCheck className="size-4" />
+            仅支持钉钉扫码
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-2 text-sm">
+            <p>• 请使用<strong>钉钉 App</strong> 扫描二维码</p>
+            <p>• 微信、支付宝等其他扫码工具无法登录</p>
+            <p>• 如未安装钉钉，请先下载：<a href="https://www.dingtalk.com" target="_blank" rel="noopener noreferrer" className="underline">钉钉官网</a></p>
+          </AlertDescription>
+        </Alert>
+        </div>
     );
   } else if (stage === "scanned") {
     content = (
