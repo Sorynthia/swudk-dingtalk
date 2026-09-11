@@ -249,8 +249,16 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
   } else if (stage === "waiting" && qrImage) {
     content = (
       <div className="flex flex-col items-center gap-4">
-        <div className="relative isolate overflow-hidden rounded-xl border bg-white">
-          <Image src={qrImage} alt="登录二维码" width={220} height={220} priority unoptimized />
+        <div className="relative isolate overflow-hidden rounded-xl border bg-white select-none">
+          <Image 
+            src={qrImage} 
+            alt="登录二维码" 
+            width={220} 
+            height={220} 
+            priority 
+            unoptimized 
+            className="pointer-events-none"
+          />
           <span className="absolute inset-x-0 bottom-0 flex h-8 items-center justify-center bg-gradient-to-t from-black/60 to-transparent text-xs font-medium text-white">
             {formatRemainingTime(secondsRemaining)}
           </span>
@@ -266,7 +274,8 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
           </AlertTitle>
           <AlertDescription className="mt-2 space-y-2 text-sm">
             <p>• 请使用<strong>钉钉 App</strong> 扫描二维码</p>
-            <p>• 微信、支付宝等其他扫码工具无法登录</p>
+            <p>• <strong className="text-destructive">使用其他扫码工具会导致页面跳转白屏</strong></p>
+            <p>• 如发生白屏，请返回本页面重新扫码</p>
             <p>• 如未安装钉钉，请先下载：<a href="https://www.dingtalk.com" target="_blank" rel="noopener noreferrer" className="underline">钉钉官网</a></p>
           </AlertDescription>
         </Alert>
