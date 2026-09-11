@@ -187,6 +187,18 @@ function SiteHeader({ status, actions }: SiteHeaderProps) {
               <span className="hidden sm:inline">GitHub</span>
             </a>
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            aria-label="自动签到"
+            title="自动签到"
+          >
+            <a href="https://sorynthia.cn" target="_blank" rel="noopener noreferrer">
+              <Clock className="size-4" />
+              <span className="hidden sm:inline">自动</span>
+            </a>
+          </Button>
           {actions}
         </div>
       </div>
@@ -424,18 +436,6 @@ function Dashboard({
           status="已登录"
           actions={
             <>
-            <Button
-              variant="outline"
-              size="sm"
-              asChild
-              aria-label="自动签到"
-              title="自动签到"
-            >
-              <a href="https://sorynthia.cn" target="_blank" rel="noopener noreferrer">
-                <Clock className="size-4" />
-                <span className="hidden sm:inline">自动</span>
-              </a>
-            </Button>
             <Button
               variant="outline"
               size="icon"
