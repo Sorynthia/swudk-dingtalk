@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   Sparkles,
   Smartphone,
+  Clock,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -142,7 +143,7 @@ function Brand() {
 function GithubIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
     </svg>
   );
 }
@@ -176,13 +177,14 @@ function SiteHeader({ status, actions }: SiteHeaderProps) {
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="sm"
             asChild
             aria-label="查看 GitHub 仓库"
             title="查看 GitHub 仓库"
           >
             <a href="https://github.com/Sorynthia/swudk-dingtalk" target="_blank" rel="noopener noreferrer">
               <GithubIcon className="size-4" />
+              <span className="hidden sm:inline">GitHub</span>
             </a>
           </Button>
           {actions}
@@ -204,116 +206,93 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (!expiresAt || (stage !== "waiting" && stage !== "scanned")) return;
-    const syncNow = () => setNow(Date.now());
-    const handleVisibilityChange = () => {
-      if (!document.hidden) syncNow();
-    };
-
-    syncNow();
-    const timer = window.setInterval(syncNow, 1000);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("pageshow", syncNow);
-    window.addEventListener("focus", syncNow);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("pageshow", syncNow);
-      window.removeEventListener("focus", syncNow);
-    };
+    if (stage !== "waiting" && stage !== "scanned") return;
+    if (!expiresAt) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
   }, [expiresAt, stage]);
 
-  const secondsLeft = expiresAt ? Math.max(0, Math.ceil((expiresAt - now) / 1000)) : 0;
-  const isGenerating = stage === "generating";
-  const hasFailed = stage === "error" || stage === "expired";
-  const hasActiveQr = (stage === "waiting" || stage === "scanned") && Boolean(qrImage);
+  const secondsRemaining = expiresAt && (stage === "waiting" || stage === "scanned") ? Math.max(0, Math.floor((expiresAt - now) / 1000)) : 0;
+
+  let content: ReactNode = null;
+
+  if (stage === "loading" || stage === "idle") {
+    content = (
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative isolate grid size-44 place-items-center rounded-xl border bg-muted">
+          <QrCode className="size-14 text-primary" aria-hidden="true" />
+        </div>
+        <Button variant="default" size="lg" onClick={onRetry}>
+          扫码登录
+        </Button>
+      </div>
+    );
+  } else if (stage === "generating") {
+    content = (
+      <div className="relative isolate grid size-44 place-items-center rounded-xl border bg-muted">
+        <LoaderCircle className="size-14 animate-spin text-primary" aria-hidden="true" />
+      </div>
+    );
+  } else if (stage === "waiting" && qrImage) {
+    content = (
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative isolate overflow-hidden rounded-xl border bg-white">
+          <Image src={qrImage} alt="登录二维码" width={220} height={220} priority unoptimized />
+          <span className="absolute inset-x-0 bottom-0 flex h-8 items-center justify-center bg-gradient-to-t from-black/60 to-transparent text-xs font-medium text-white">
+            {formatRemainingTime(secondsRemaining)}
+          </span>
+        </div>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Smartphone className="size-4" aria-hidden="true" />
+          打开钉钉扫描二维码登录
+        </p>
+      </div>
+    );
+  } else if (stage === "scanned") {
+    content = (
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative isolate grid size-44 place-items-center rounded-xl border bg-muted">
+          <ShieldCheck className="size-14 text-primary" aria-hidden="true" />
+        </div>
+        <p className="text-sm text-muted-foreground">已扫描,请在手机上确认登录</p>
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Clock3 className="size-3.5" aria-hidden="true" />
+          {formatRemainingTime(secondsRemaining)}
+        </p>
+      </div>
+    );
+  } else if (stage === "expired") {
+    content = (
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative isolate grid size-44 place-items-center rounded-xl border bg-muted">
+          <QrCode className="size-14 text-muted-foreground" aria-hidden="true" />
+        </div>
+        <p className="text-sm text-muted-foreground">二维码已过期</p>
+        <Button variant="outline" size="lg" onClick={onRetry}>
+          重新生成
+        </Button>
+      </div>
+    );
+  } else if (stage === "error") {
+    content = (
+      <div className="flex flex-col items-center gap-4">
+        <Alert variant="destructive" className="max-w-sm">
+          <AlertTitle>登录失败</AlertTitle>
+          <AlertDescription>{message || "请稍后重试"}</AlertDescription>
+        </Alert>
+        <Button variant="outline" size="lg" onClick={onRetry}>
+          重新生成二维码
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <main data-screen="login" className="min-h-dvh">
       <div className="flex min-h-dvh flex-col">
-        <SiteHeader status="钉钉登录" />
-
-        <section className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-3 py-12 sm:px-6 sm:py-16">
-          <div data-reveal className="mb-8 text-center">
-            <h1 className="text-balance text-3xl font-semibold sm:text-4xl">登录钉钉扫码打卡</h1>
-            <p className="mt-4 text-sm leading-7 text-muted-foreground sm:text-base">
-              扫描二维码，并在钉钉中确认登录
-            </p>
-          </div>
-
-          <div data-reveal className="isolate mx-auto size-[min(18rem,calc(100vw-4rem))] sm:size-[20rem]">
-            <div className="relative z-10 grid size-full place-items-center rounded-xl border bg-card p-3 sm:p-4">
-              {hasActiveQr && qrImage ? (
-                <Image
-                  src={qrImage}
-                  alt="钉钉登录二维码"
-                  width={320}
-                  height={320}
-                  unoptimized
-                  priority
-                  className="size-full"
-                />
-              ) : isGenerating ? (
-                <div className="flex flex-col items-center gap-4 text-muted-foreground" role="status">
-                  <LoaderCircle className="size-8 animate-spin text-primary" aria-hidden="true" />
-                  <span className="text-sm">正在生成二维码…</span>
-                </div>
-              ) : hasFailed ? (
-                <div className="flex max-w-52 flex-col items-center text-center">
-                  <ScanLine className="mb-4 size-10 text-muted-foreground" aria-hidden="true" />
-                  <p className="font-medium">{stage === "expired" ? "二维码已过期" : "暂时无法登录"}</p>
-                  <p className="mt-2 text-sm leading-5 text-muted-foreground">{message}</p>
-                  <Button size="lg" className="mt-5" onClick={onRetry}>
-                    <RefreshCw className="size-4" />
-                    重新生成
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex max-w-56 flex-col items-center text-center">
-                  <QrCode className="mb-4 size-10 text-primary" aria-hidden="true" />
-                  <p className="font-medium">按需生成登录二维码</p>
-                  <p className="mt-2 text-sm leading-5 text-muted-foreground">
-                    二维码只在你准备扫码时创建
-                  </p>
-                  <Button size="lg" className="mt-5" onClick={onRetry}>
-                    <QrCode className="size-4" />
-                    生成登录二维码
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-
-            {(stage === "waiting" || stage === "scanned") && (
-              <div className="mt-8 flex min-h-12 items-center justify-center gap-3" aria-live="polite">
-                <span
-                  className="status-pulse size-2 rounded-full bg-emerald-600"
-                  aria-hidden="true"
-                />
-                <div className="text-sm">
-                  <span className="font-medium">
-                    {message || (stage === "scanned" ? "已扫码，请在手机端确认" : "等待扫码")}
-                  </span>
-                  {expiresAt && (
-                    <span className="ml-2 text-muted-foreground">
-                      剩余 {formatRemainingTime(secondsLeft)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {stage === "scanned" && (
-              <Alert className="mt-2 max-w-md border-emerald-200 bg-emerald-50 text-emerald-950 shadow-sm">
-                <Smartphone className="size-4" />
-                <AlertTitle>已识别扫码</AlertTitle>
-                <AlertDescription>请返回钉钉完成授权，页面会自动继续。</AlertDescription>
-              </Alert>
-            )}
-          <p className="mt-8 flex items-center gap-2 text-center text-xs leading-5 text-muted-foreground">
-            <ShieldCheck className="size-3.5" aria-hidden="true" />
-            请在本人设备上完成扫码登录
-          </p>
+        <SiteHeader status="未登录" />
+        <section data-reveal className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-3 py-16 text-center sm:px-6">
+          {content}
         </section>
       </div>
     </main>
@@ -445,6 +424,18 @@ function Dashboard({
           status="已登录"
           actions={
             <>
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              aria-label="自动签到"
+              title="自动签到"
+            >
+              <a href="https://sorynthia.cn" target="_blank" rel="noopener noreferrer">
+                <Clock className="size-4" />
+                <span className="hidden sm:inline">自动</span>
+              </a>
+            </Button>
             <Button
               variant="outline"
               size="icon"
@@ -621,9 +612,7 @@ function EnabledAppShell({
   const [expiresAt, setExpiresAt] = useState(initialPayload.expiresAt);
   const [message, setMessage] = useState(initialPayload.message);
   const [profile, setProfile] = useState(initialPayload.profile);
-  const [useInitialCheckInState, setUseInitialCheckInState] = useState(
-    initialPayload.stage === "authenticated",
-  );
+  const [useInitialCheckInState, setUseInitialCheckInState] = useState(true);
   const qrRequestPending = useRef(false);
 
   const applyPayload = useCallback((payload: SessionPayload) => {
