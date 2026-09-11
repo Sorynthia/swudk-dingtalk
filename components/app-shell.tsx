@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   LogOut,
   MapPin,
+  MessageCircle,
   QrCode,
   RefreshCw,
   ScanLine,
@@ -161,6 +162,18 @@ function SiteHeader({ status, actions }: SiteHeaderProps) {
           <Badge aria-hidden="true" variant="outline" className="hidden border-primary/20 bg-background/60 text-muted-foreground sm:inline-flex">
             {status}
           </Badge>
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            aria-label="反馈"
+            title="反馈"
+          >
+            <a href="https://qm.qq.com/q/c0UjhguHRe" target="_blank" rel="noopener noreferrer">
+              <MessageCircle className="size-4" />
+              <span className="hidden sm:inline">反馈</span>
+            </a>
+          </Button>
           <Button
             variant="ghost"
             size="icon"

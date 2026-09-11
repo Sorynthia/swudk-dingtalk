@@ -113,6 +113,8 @@ describe("客户端会话切换", () => {
     expect(html).not.toContain("SWU钉钉扫码打卡");
     expect(html).not.toContain("西大寝签");
     expect(html).not.toContain("SWU Campus");
+    expect(html).toContain('href="https://qm.qq.com/q/c0UjhguHRe"');
+    expect(html).toContain("反馈");
     expect(html).toMatch(
       /<header[^>]*class="[^"]*sticky top-0 z-50 px-3 pt-3 sm:px-5 sm:pt-4[^"]*">/,
     );
