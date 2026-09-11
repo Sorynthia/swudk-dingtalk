@@ -220,6 +220,35 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
 
   useEffect(() => {
     if (stage !== "waiting" && stage !== "scanned") return;
+    
+    // 检测是否从白屏返回
+    const wrongScanFlag = sessionStorage.getItem("wrongScan");
+    if (wrongScanFlag) {
+      sessionStorage.removeItem("wrongScan");
+      // 触发错误状态由父组件处理
+      window.dispatchEvent(new CustomEvent("wrongScanDetected"));
+    }
+    
+    const handleBeforeUnload = () => {
+      sessionStorage.setItem("wrongScan", "1");
+    };
+    
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        sessionStorage.removeItem("wrongScan");
+      }
+    };
+    
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("pageshow", handlePageShow);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  }, [stage]);
+
+  useEffect(() => {
+    if (stage !== "waiting" && stage !== "scanned") return;
     if (!expiresAt) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
@@ -267,18 +296,7 @@ function LoginScreen({ stage, qrImage, expiresAt, message, onRetry }: LoginScree
           <Smartphone className="size-4" aria-hidden="true" />
           打开钉钉扫描二维码登录
         </p>
-      <Alert className="mt-4 max-w-md">
-          <AlertTitle className="flex items-center gap-2">
-            <ShieldCheck className="size-4" />
-            仅支持钉钉扫码
-          </AlertTitle>
-          <AlertDescription className="mt-2 space-y-2 text-sm">
-            <p>• 请使用<strong>钉钉 App</strong> 扫描二维码</p>
-            <p>• <strong className="text-destructive">使用其他扫码工具会导致页面跳转白屏</strong></p>
-            <p>• 如发生白屏，请返回本页面重新扫码</p>
-            <p>• 如未安装钉钉，请先下载：<a href="https://www.dingtalk.com" target="_blank" rel="noopener noreferrer" className="underline">钉钉官网</a></p>
-          </AlertDescription>
-        </Alert>
+
         </div>
     );
   } else if (stage === "scanned") {
@@ -789,3 +807,7 @@ function EnabledAppShell({
 export default function AppShell({ serviceEnabled, ...props }: AppShellProps) {
   return serviceEnabled ? <EnabledAppShell {...props} /> : <MaintenanceScreen />;
 }
+
+
+
+
