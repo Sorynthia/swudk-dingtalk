@@ -17,6 +17,7 @@ import {
   Sparkles,
   Smartphone,
   Clock,
+  CalendarCheck,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -159,6 +160,18 @@ function SiteHeader({ status, actions }: SiteHeaderProps) {
       <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-3 rounded-xl border bg-background px-3 sm:h-16 sm:px-4">
         <Brand />
         <div className="flex shrink-0 items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            aria-label="自动签到"
+            title="自动签到"
+          >
+            <a href="https://sorynthia.cn" target="_blank" rel="noopener noreferrer">
+              <CalendarCheck className="size-4" />
+              <span className="hidden sm:inline">自动</span>
+            </a>
+          </Button>
           <span className="sr-only">{status}</span>
           <Badge aria-hidden="true" variant="outline" className="hidden border-primary/20 bg-background/60 text-muted-foreground sm:inline-flex">
             {status}
@@ -187,21 +200,9 @@ function SiteHeader({ status, actions }: SiteHeaderProps) {
               <span className="hidden sm:inline">GitHub</span>
             </a>
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            asChild
-            aria-label="自动签到"
-            title="自动签到"
-          >
-            <a href="https://sorynthia.cn" target="_blank" rel="noopener noreferrer">
-              <Clock className="size-4" />
-              <span className="hidden sm:inline">自动</span>
-            </a>
-          </Button>
           {actions}
-        </div>
-      </div>
+              </div>
+    </div>
     </header>
   );
 }
